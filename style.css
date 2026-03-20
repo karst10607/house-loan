@@ -95,8 +95,14 @@ body {
 .site-header {
   position: relative;
   z-index: 1;
-  padding: 2rem 1.5rem 0;
+  padding: 3rem 1.5rem 0;
   text-align: center;
+  -webkit-app-region: drag; /* Make the header area draggable */
+}
+
+/* Ensure interactive elements in the header are NOT draggable */
+.header-inner *, .logo * {
+  -webkit-app-region: no-drag;
 }
 
 .header-inner {
@@ -577,4 +583,21 @@ input[type=number] { -moz-appearance: textfield; }
   .summary-value { font-size: 1.25rem; }
   .radio-group { flex-direction: column; }
   .radio-option { min-width: 0; }
+}
+/* ===========================
+   P2P Sync Status
+   =========================== */
+#pear-sync-status .status-dot {
+  width: 8px;
+  height: 8px;
+  background: #34d399;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #34d399;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 0.6; transform: scale(1); }
 }

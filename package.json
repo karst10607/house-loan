@@ -1,0 +1,35 @@
+{
+  "name": "house-loan-calculator",
+  "main": "main.js",
+  "type": "module",
+  "dependencies": {
+    "pear-electron": "^1.0.0",
+    "pear-bridge": "^1.0.0"
+  },
+  "pear": {
+    "name": "house-loan-calculator",
+    "pre": "pear-electron/pre",
+    "gui": {
+      "width": 900,
+      "height": 700,
+      "minWidth": 400,
+      "minHeight": 500,
+      "frame": true,
+      "autoHideMenuBar": true
+    },
+    "stage": {
+      "ignore": [
+        ".git",
+        ".github",
+        "gh_2.67.0_linux_amd64",
+        "gh.tar.gz",
+        "README.md",
+        ".gitignore"
+      ]
+    },
+    "links": [
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com"
+    ]
+  }
+}

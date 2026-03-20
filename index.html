@@ -182,6 +182,14 @@
     <p class="footer-copy">© 2026 房貸計算器 · <a href="https://github.com" target="_blank" rel="noopener">GitHub</a></p>
   </footer>
 
+  <script type="module" src="app.js"></script>
   <script src="calculator.js"></script>
+  <script>
+    /* Pear Runtime detection — only runs inside Pear, ignored in browsers */
+    if (typeof Pear !== 'undefined') {
+      document.querySelector('.footer-copy').innerHTML +=
+        ' · <span style="color:#34d399">🍐 Pear P2P</span>';
+    }
+  </script>
 </body>
 </html>
