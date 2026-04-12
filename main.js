@@ -23,18 +23,31 @@ async function createWindow() {
     }
   })
 
-  // Initialize P2P Storage (Main Process / Node Environment)
-  storage = new P2PStorage(storagePath)
-  await storage.ready()
-  
-  // Set up periodic sync of peer status to frontend
-  setInterval(() => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('state-update', storage.getState())
-    }
-  }, 2000)
-
+  // Load UI immediately so the user doesn't see a blank screen
   mainWindow.loadFile('index.html')
+
+  try {
+    // Initialize P2P Storage (Main Process / Node Environment)
+    console.log('[Main] Initializing P2P Storage...')
+    storage = new P2PStorage(storagePath)
+    await storage.ready()
+    console.log('[Main] P2P Storage Ready.')
+    
+    // Set up periodic sync of peer status to frontend
+    setInterval(() => {
+      if (mainWindow && !mainWindow.isDestroyed() && storage) {
+        mainWindow.webContents.send('state-update', storage.getState())
+      }
+    }, 2000)
+  } catch (err) {
+    console.error('[Main] P2P Initialization failed:', err)
+    // Send error to UI if possible
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('state-update', { error: err.message })
+      }
+    }, 1000)
+  }
 }
 
 // IPC Handlers mapped to frontend api requests
