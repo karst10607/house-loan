@@ -73,6 +73,7 @@ export class P2PStorage {
       id: nbId,
       title: '🔗 ' + hexKey.slice(0, 12) + '...',
       count: 0,
+      syncing: true, // Mark as syncing
       remote: true,
       driveKey: hexKey
     })
@@ -86,30 +87,60 @@ export class P2PStorage {
 
   async _scanRemoteDrive(remoteDrive, notebookId, hexKey) {
     try {
-      await new Promise(r => setTimeout(r, 3000))
-      const docs = []
-      for await (const entry of remoteDrive.list('/files/')) {
-        const name = entry.key.split('/').pop().replace(/^doc-\d+-/, '')
-        docs.push({
-          id: 'rdoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-          title: name,
-          path: entry.key,
-          type: this._guessType(name),
-          mime: this._guessMime(name),
-          date: new Date().toLocaleDateString(),
-          remote: true,
-          driveKey: hexKey
-        })
-      }
-      this.documents[notebookId] = docs
-      const nb = this.notebooks.find(n => n.id === notebookId)
-      if (nb) nb.count = docs.length
-      console.log(`[P2P] Scanned remote: found ${docs.length} files`)
+      console.log(`[P2P] Starting sync for ${notebookId}...`)
       
-      // Notify UI that a scan finished so it can re-render
-      if (this.onPeerChange) this.onPeerChange(this.peerCount)
+      // Wait for the drive to find peers and update its metadata
+      // This is much more reliable than a fixed timeout
+      await remoteDrive.update()
+      
+      const doScan = async () => {
+        const docs = []
+        try {
+          // Hyperdrive v13 list() works great once metadata is updated
+          for await (const entry of remoteDrive.list('/files/')) {
+            const name = entry.key.split('/').pop().replace(/^doc-\d+-/, '')
+            docs.push({
+              id: 'rdoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+              title: name,
+              path: entry.key,
+              type: this._guessType(name),
+              mime: this._guessMime(name),
+              date: new Date().toLocaleDateString(),
+              remote: true,
+              driveKey: hexKey
+            })
+          }
+          
+          this.documents[notebookId] = docs
+          const nb = this.notebooks.find(n => n.id === notebookId)
+          if (nb) {
+            nb.count = docs.length
+            nb.syncing = false // Finished initial sync
+          }
+          
+          console.log(`[P2P] Scanned remote ${notebookId}: found ${docs.length} files`)
+          if (this.onPeerChange) this.onPeerChange(this.peerCount)
+        } catch (e) {
+          console.error('[P2P] Scan error loop:', e.message)
+        }
+      }
+
+      // Initial scan
+      await doScan()
+
+      // Set up a "watch" or periodic refresh for remote drives
+      // In a real production app, we would use drive.core.on('append')
+      // but simple polling every 10s for remote drives is very sturdy for now.
+      const interval = setInterval(async () => {
+        if (!this.remoteDrives.has(hexKey)) return clearInterval(interval)
+        await remoteDrive.update()
+        await doScan()
+      }, 10000)
+
     } catch (err) {
-      console.error('[P2P] Remote scan error:', err.message)
+      console.error('[P2P] Remote init error:', err.message)
+      const nb = this.notebooks.find(n => n.id === notebookId)
+      if (nb) nb.syncing = false
     }
   }
 

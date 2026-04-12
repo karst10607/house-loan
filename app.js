@@ -139,14 +139,19 @@ async function loadState() {
 function renderFolders(folders) {
   const ul = document.getElementById('folders-list')
   if (!ul) return
+  
+  // To avoid flickering, we can check if content changed, 
+  // but for this scale, direct re-render is usually fine.
   ul.innerHTML = ''
   folders.forEach(f => {
     const li = document.createElement('li')
     li.dataset.id = f.id
     if (f.id === activeFolderId) li.classList.add('active')
 
+    const syncingLabel = f.syncing ? ' <small style="color:var(--accent-teal); opacity:0.7;">(同步中...)</small>' : ''
+
     li.innerHTML = `
-      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${f.title}</span>
+      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${f.title}${syncingLabel}</span>
       <span class="badge">${f.count || 0}</span>
     `
 
