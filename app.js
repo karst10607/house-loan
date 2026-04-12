@@ -196,16 +196,59 @@ function renderDocs(docs) {
   docs.forEach(doc => {
     const li = document.createElement('li')
     const typeClass = doc.type === 'pdf' ? 'type-pdf' : 'type-img'
+    
+    // Only show delete button for non-remote documents
+    const deleteBtnHtml = !doc.remote ? `
+      <div class="doc-actions">
+        <button class="doc-delete-btn" title="刪除檔案">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>` : ''
+
     li.innerHTML = `
       <div class="doc-info">
         <span class="doc-title">${doc.title}</span>
         <span class="doc-date">${doc.date}</span>
       </div>
       <span class="doc-type ${typeClass}">${doc.type.toUpperCase()}</span>
+      ${deleteBtnHtml}
     `
+    
     li.addEventListener('click', () => loadAndPreviewDocument(doc))
+    
+    // Setup delete event
+    const delBtn = li.querySelector('.doc-delete-btn')
+    if (delBtn) {
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation() // Don't trigger preview
+        handleDeleteFile(doc)
+      })
+    }
+    
     ul.appendChild(li)
   })
+}
+
+// ─── Delete ───────────────────────────────────────────────────
+async function handleDeleteFile(doc) {
+  if (!activeFolderId) return
+  if (!confirm(`確定要刪除「${doc.title}」嗎？此動作無法復原。`)) return
+
+  try {
+    const result = await window.api.deleteFile(activeFolderId, doc.id)
+    if (result.success) {
+      await loadState()
+      
+      // Clear viewer if the deleted doc was being viewed
+      const viewerContent = document.getElementById('viewer-content')
+      if (viewerContent.innerHTML.includes(doc.title)) {
+        viewerContent.innerHTML = '<div class="empty-viewer">選擇文件以預覽</div>'
+      }
+    }
+  } catch (err) {
+    console.error('Delete failed:', err)
+    alert('刪除失敗：' + err.message)
+  }
 }
 
 // ─── Preview ──────────────────────────────────────────────────

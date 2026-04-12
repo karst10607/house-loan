@@ -55,6 +55,7 @@ ipcMain.handle('get-state', () => storage.getState())
 ipcMain.handle('save-file', async (e, notebookId, fileObj) => await storage.saveFile(notebookId, fileObj))
 ipcMain.handle('read-file', async (e, filePath, remoteKey) => await storage.readFile(filePath, remoteKey))
 ipcMain.handle('connect-remote', async (e, hexKey) => await storage.connectRemote(hexKey))
+ipcMain.handle('delete-file', async (e, notebookId, docId) => await storage.deleteFile(notebookId, docId))
 
 ipcMain.on('window-control', (e, action) => {
   if (!mainWindow) return

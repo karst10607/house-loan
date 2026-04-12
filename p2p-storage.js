@@ -189,6 +189,29 @@ export class P2PStorage {
     return doc
   }
 
+  async deleteFile(notebookId, docId) {
+    if (!this.drive) throw new Error('Drive not ready')
+    
+    const docs = this.documents[notebookId] || []
+    const index = docs.findIndex(d => d.id === docId)
+    if (index === -1) throw new Error('Document not found')
+
+    const doc = docs[index]
+    if (doc.remote) throw new Error('Cannot delete remote files')
+
+    // Delete from Hyperdrive
+    await this.drive.del(doc.path)
+
+    // Update local state
+    docs.splice(index, 1)
+    
+    const nb = this.notebooks.find(n => n.id === notebookId)
+    if (nb) nb.count = docs.length
+
+    console.log(`[P2P] Deleted file: ${doc.path}`)
+    return { success: true }
+  }
+
   async readFile(filePath, remoteKey) {
     let drive = this.drive
     if (remoteKey && this.remoteDrives.has(remoteKey)) {

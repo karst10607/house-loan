@@ -339,6 +339,34 @@ body {
   font-size: 13px;
 }
 
+.doc-actions {
+  display: flex;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.docs-list li:hover .doc-actions {
+  opacity: 1;
+}
+
+.doc-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-hint);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.doc-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
 /* ===========================
    Right Column: Viewer + Calculator
    =========================== */
