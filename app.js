@@ -33,9 +33,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Listen to accurate state updates from Main Process instead of polling
   window.api.onStateUpdate((state) => {
     updatePeerBadge(state.peerCount || 0)
-    // Only update key if it wasn't there to prevent overriding user input occasionally
+    
+    // Auto-refresh folders and current document list when state changes
+    renderFolders(state.notebooks)
+    if (activeFolderId) {
+      const docs = state.documents[activeFolderId] || []
+      renderDocs(docs)
+    }
+
+    // Only update key if it wasn't there
     const keyInput = document.getElementById('my-key-input')
-    if (keyInput && (!keyInput.value || keyInput.value === 'Not Ready')) {
+    if (keyInput && (!keyInput.value || keyInput.value === 'Not Ready' || keyInput.value === 'Loading...')) {
       keyInput.value = state.key || 'Not Ready'
     }
   })
