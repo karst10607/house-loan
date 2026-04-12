@@ -1,10 +1,17 @@
 {
   "name": "house-loan-calculator",
+  "version": "1.7.1",
   "main": "main.js",
   "type": "module",
+  "scripts": {
+    "start": "electron ."
+  },
   "dependencies": {
-    "pear-electron": "^1.0.0",
-    "pear-bridge": "^1.0.0"
+    "b4a": "^1.8.0",
+    "corestore": "^7.9.2",
+    "hyperbee": "^2.27.3",
+    "hyperdrive": "^13.3.2",
+    "hyperswarm": "^4.17.0"
   },
   "pear": {
     "name": "house-loan-calculator",
@@ -31,5 +38,9 @@
       "https://fonts.googleapis.com",
       "https://fonts.gstatic.com"
     ]
+  },
+  "devDependencies": {
+    "electron": "^41.2.0",
+    "electron-builder": "^26.8.1"
   }
 }

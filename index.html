@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>房貸計算器 | House Loan Calculator</title>
-  <meta name="description" content="免費的房貸計算器，輸入貸款金額、年利率和年限，計算每月應繳金額及完整攤還表。" />
+  <title>房貸計算器 | House Loan Calculator P2P</title>
+  <meta name="description" content="免費的房貸計算器與文件管理" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet" />
@@ -17,9 +17,21 @@
     <div class="orb orb-3"></div>
   </div>
 
-  <header class="site-header">
-    <div class="header-inner">
-      <div class="logo">
+  <div class="app-layout">
+    <!-- 自訂 Title Bar -->
+    <div class="custom-title-bar">
+      <div class="title-text">House Loan Calculator</div>
+      <div class="window-controls">
+        <button id="win-min" class="win-btn" aria-label="Minimize">_</button>
+        <button id="win-max" class="win-btn" aria-label="Maximize">□</button>
+        <button id="win-close" class="win-btn close-btn" aria-label="Close">×</button>
+      </div>
+    </div>
+
+    <div class="app-body">
+      <!-- 左側欄：資料夾 (Notebooks) -->
+      <aside class="sidebar-folders" id="sidebar-folders">
+      <div class="sidebar-header">
         <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M4 14L16 4L28 14V28H20V20H12V28H4V14Z" fill="url(#logoGrad)" />
           <defs>
@@ -29,167 +41,155 @@
             </linearGradient>
           </defs>
         </svg>
-        <span>房貸計算器</span>
+        <span>房貸專案</span>
       </div>
-      <p class="header-sub">House Loan Calculator</p>
-    </div>
-  </header>
-
-  <main class="main-container">
-    <!-- Input Card -->
-    <section class="card input-card" aria-label="貸款資訊輸入">
-      <h2 class="card-title">貸款資訊</h2>
-
-      <div class="form-grid">
-        <div class="form-group">
-          <label for="loanAmount">貸款金額</label>
-          <div class="input-wrapper">
-            <span class="input-prefix">NT$</span>
-            <input
-              type="number"
-              id="loanAmount"
-              placeholder="5,000,000"
-              min="0"
-              step="100000"
-              value="5000000"
-              aria-label="貸款金額（新台幣）"
-            />
-          </div>
-          <span class="input-hint" id="amountHint"></span>
-        </div>
-
-        <div class="form-group">
-          <label for="annualRate">年利率</label>
-          <div class="input-wrapper">
-            <input
-              type="number"
-              id="annualRate"
-              placeholder="2.5"
-              min="0"
-              max="30"
-              step="0.01"
-              value="2.5"
-              aria-label="年利率（百分比）"
-            />
-            <span class="input-suffix">%</span>
+      <ul class="folders-list" id="folders-list">
+        <!-- JS Mock 會填入這裡 -->
+      </ul>
+      <div class="sidebar-footer">
+        <div class="key-section" style="display:flex; flex-direction:column; gap:6px; margin-bottom: 12px; font-size: 11px;">
+          <label style="color:var(--text-hint);">本機 P2P Key：</label>
+          <input type="text" id="my-key-input" readonly style="background: rgba(0,0,0,0.3); border:1px solid var(--border); color: var(--accent-teal); padding: 4px; border-radius: 4px; width:100%; font-family: monospace;" value="Loading..." onclick="this.select()" />
+          
+          <label style="color:var(--text-hint); margin-top: 4px;">連線至遠端 Key：</label>
+          <div style="display:flex; gap:4px;">
+            <input type="text" id="remote-key-input" placeholder="輸入 Key..." style="background: rgba(0,0,0,0.3); border:1px solid var(--border); color: #fff; padding: 4px; border-radius: 4px; flex:1;" />
+            <button id="connect-btn" style="background: var(--accent-purple); color:#fff; border:none; border-radius:4px; padding: 0 8px; cursor:pointer;">連線</button>
           </div>
         </div>
-
-        <div class="form-group">
-          <label for="loanYears">貸款年限</label>
-          <div class="input-wrapper">
-            <input
-              type="number"
-              id="loanYears"
-              placeholder="20"
-              min="1"
-              max="40"
-              step="1"
-              value="20"
-              aria-label="貸款年限（年）"
-            />
-            <span class="input-suffix">年</span>
-          </div>
-        </div>
-
-        <div class="form-group full-width">
-          <label>還款方式</label>
-          <div class="radio-group" role="radiogroup" aria-label="還款方式">
-            <label class="radio-option">
-              <input type="radio" name="repayType" value="equal-payment" id="equalPayment" checked />
-              <span class="radio-label">
-                <strong>本息均攤</strong>
-                <small>每月還款金額固定</small>
-              </span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="repayType" value="equal-principal" id="equalPrincipal" />
-              <span class="radio-label">
-                <strong>本金均攤</strong>
-                <small>每月還款本金固定，利息遞減</small>
-              </span>
-            </label>
-          </div>
-        </div>
+        <button class="add-btn">+ 新增專案</button>
       </div>
+    </aside>
 
-      <button id="calcBtn" class="calc-btn" aria-label="開始計算">
-        <span class="btn-text">計算</span>
-        <svg class="btn-icon" viewBox="0 0 20 20" fill="none"><path d="M4 10h12M12 6l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-    </section>
-
-    <!-- Result Section -->
-    <section class="results-section" id="resultsSection" aria-live="polite" hidden>
-      <!-- Summary Cards -->
-      <div class="summary-grid">
-        <div class="summary-card" id="cardMonthly">
-          <div class="summary-label">首月月付金額</div>
-          <div class="summary-value" id="monthlyPayment">—</div>
-          <div class="summary-sub" id="monthlyPaymentSub"></div>
-        </div>
-        <div class="summary-card accent">
-          <div class="summary-label">總利息支出</div>
-          <div class="summary-value" id="totalInterest">—</div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-label">總還款金額</div>
-          <div class="summary-value" id="totalPayment">—</div>
-        </div>
-      </div>
-
-      <!-- Breakdown Bar -->
-      <div class="breakdown-bar-container card" id="breakdownBarCard">
-        <div class="breakdown-bar-label">
-          <span>本金 <strong id="principalPct"></strong></span>
-          <span>利息 <strong id="interestPct"></strong></span>
-        </div>
-        <div class="breakdown-bar" id="breakdownBar" role="img" aria-label="本金與利息比例">
-          <div class="bar-principal" id="barPrincipal"></div>
-          <div class="bar-interest" id="barInterest"></div>
-        </div>
-      </div>
-
-      <!-- Amortization Toggle -->
-      <div class="amort-header">
-        <h3>攤還明細表</h3>
-        <button id="toggleAmort" class="toggle-btn" aria-expanded="false" aria-controls="amortTable">
-          展開明細
+    <!-- 中間欄：文件列表 (Documents) -->
+    <section class="sidebar-docs" id="sidebar-docs">
+      <div class="docs-header">
+        <h3>專案文件</h3>
+        <button class="upload-icon-btn" id="upload-btn" aria-label="上傳文件">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
         </button>
+        <input type="file" id="file-upload-input" multiple accept=".pdf,image/*,text/*" hidden />
       </div>
+      <ul class="docs-list" id="docs-list">
+        <!-- JS Mock 會填入這裡 -->
+      </ul>
+    </section>
 
-      <div id="amortWrapper" class="amort-wrapper" hidden>
-        <div class="table-scroll">
-          <table id="amortTable" class="amort-table">
-            <thead>
-              <tr>
-                <th scope="col">期數</th>
-                <th scope="col">月付金額</th>
-                <th scope="col">還款本金</th>
-                <th scope="col">利息</th>
-                <th scope="col">剩餘本金</th>
-              </tr>
-            </thead>
-            <tbody id="amortBody"></tbody>
-          </table>
+    <!-- 右側欄：主內容與計算器 -->
+    <main class="content-area">
+      <!-- 右半上部：文件預覽器 -->
+      <div class="viewer-pane" id="viewer-pane">
+        <div id="viewer-content" class="viewer-content">
+          <div class="empty-viewer">選擇文件以預覽</div>
         </div>
       </div>
-    </section>
-  </main>
 
-  <footer class="site-footer">
-    <p>本計算器結果僅供參考，實際貸款條件請以銀行為準。</p>
-    <p class="footer-copy">© 2026 房貸計算器 · <a href="https://github.com" target="_blank" rel="noopener">GitHub</a></p>
-  </footer>
+      <!-- 右半下部：房貸計算器 -->
+      <div class="calculator-pane" id="calculator-pane">
+        <!-- 套用原有的 class 以減少 CSS 破版，但針對小空間進行調整 -->
+        <div class="card input-card compact" aria-label="貸款資訊輸入">
+          <div class="form-grid compact-grid">
+            <div class="form-group">
+              <label for="loanAmount">貸款金額</label>
+              <div class="input-wrapper">
+                <span class="input-prefix">NT$</span>
+                <input type="number" id="loanAmount" placeholder="5,000,000" min="0" step="100000" value="5000000" />
+              </div>
+              <span class="input-hint" id="amountHint"></span>
+            </div>
+
+            <div class="form-group row-group">
+              <div class="half">
+                <label for="annualRate">年利率</label>
+                <div class="input-wrapper">
+                  <input type="number" id="annualRate" value="2.5" step="0.01" />
+                  <span class="input-suffix">%</span>
+                </div>
+              </div>
+              <div class="half">
+                <label for="loanYears">貸款</label>
+                <div class="input-wrapper">
+                  <input type="number" id="loanYears" value="20" step="1" />
+                  <span class="input-suffix">年</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group full-width mb-0">
+              <div class="radio-group compact-radio" role="radiogroup">
+                <label class="radio-option">
+                  <input type="radio" name="repayType" value="equal-payment" id="equalPayment" checked />
+                  <span class="radio-label">本息均攤</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="repayType" value="equal-principal" id="equalPrincipal" />
+                  <span class="radio-label">本金均攤</span>
+                </label>
+              </div>
+            </div>
+            
+            <button id="calcBtn" class="calc-btn compact-btn">計算</button>
+          </div>
+        </div>
+
+        <!-- Result Section -->
+        <div class="results-section compact-results" id="resultsSection" hidden>
+          <div class="summary-grid compact-summary">
+            <div class="summary-card" id="cardMonthly">
+              <div class="summary-label">首月月付</div>
+              <div class="summary-value" id="monthlyPayment">—</div>
+              <div class="summary-sub" id="monthlyPaymentSub" style="font-size:10px"></div>
+            </div>
+            <div class="summary-card accent">
+              <div class="summary-label">總利息</div>
+              <div class="summary-value" id="totalInterest">—</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">總還款</div>
+              <div class="summary-value" id="totalPayment">—</div>
+            </div>
+          </div>
+
+          <div class="breakdown-bar-container card compact-bar" id="breakdownBarCard">
+            <div class="breakdown-bar-label">
+              <span>本 <strong id="principalPct"></strong></span>
+              <span>息 <strong id="interestPct"></strong></span>
+            </div>
+            <div class="breakdown-bar" id="breakdownBar">
+              <div class="bar-principal" id="barPrincipal"></div>
+              <div class="bar-interest" id="barInterest"></div>
+            </div>
+          </div>
+
+          <!-- Amortization Toggle -->
+          <div class="amort-header compact-amort-header">
+            <h4>明細表</h4>
+            <button id="toggleAmort" class="toggle-btn" aria-expanded="false" aria-controls="amortTable">展開</button>
+          </div>
+
+          <div id="amortWrapper" class="amort-wrapper compact-table" hidden>
+            <div class="table-scroll">
+              <table id="amortTable" class="amort-table">
+                <thead>
+                  <tr>
+                    <th>期數</th>
+                    <th>月付</th>
+                    <th>本金</th>
+                    <th>利息</th>
+                    <th>剩餘</th>
+                  </tr>
+                </thead>
+                <tbody id="amortBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+    </div> <!-- app-body end -->
+  </div> <!-- app-layout end -->
 
   <script type="module" src="app.js"></script>
   <script src="calculator.js"></script>
-  <script>
-    /* Pear Runtime detection — only runs inside Pear, ignored in browsers */
-    if (typeof Pear !== 'undefined') {
-      document.querySelector('.footer-copy').innerHTML +=
-        ' · <span style="color:#34d399">🍐 Pear P2P</span>';
-    }
-  </script>
 </body>
 </html>
