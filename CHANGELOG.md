@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v1.11.0 (2026-04-13)
+
+### 🧺 資產打包與路徑改寫 (Asset Bundling Milestone)
+- **原始圖檔擷取**：套件現在會下載網頁所有圖片，而非使用 Base64。
+- **HTML 路徑改寫**：自動將遠端圖片連結替換為本地相對路徑，確保離線與 P2P 同步品質。
+- **連線優化**：修復 Chrome Extension 與 Electron 之間的通訊授權問題。
+
 ## v1.10.0 (2026-04-13)
 
 ### 🌐 萬物皆可剪 (P2P Web Clipper Milestone)
