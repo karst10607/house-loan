@@ -35,17 +35,25 @@ async function createWindow() {
     // --- Web Clipper Receiver (Port 44123) ---
     // Start this BEFORE storage.ready() so it's responsive immediately
     http.createServer((req, res) => {
+      // Standard CORS + Private Network Access (PNA) headers
       res.setHeader('Access-Control-Allow-Origin', '*')
       res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-      if (req.method === 'OPTIONS') return res.end()
+      res.setHeader('Access-Control-Allow-Private-Network', 'true') // Required for Chrome PNA
+      
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204)
+        return res.end()
+      }
 
       if (req.method === 'POST' && req.url === '/api/clip') {
+        console.log('[Main] Clipper Bridge: Receiving snapshot...')
         let body = ''
         req.on('data', chunk => { body += chunk })
         req.on('end', async () => {
           try {
             const data = JSON.parse(body)
+            console.log(`[Main] Clipper Bridge: Parsing ${Math.round(body.length / 1024)}KB payload...`)
             await storage.saveClip(data.title, data.url, data.html, data.assets)
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('state-update', storage.getState())
@@ -53,6 +61,7 @@ async function createWindow() {
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: true }))
           } catch (err) {
+            console.error('[Main] Clipper Bridge Error:', err.message)
             res.writeHead(500); res.end(err.message)
           }
         })
