@@ -40,17 +40,26 @@ export class P2PStorage {
     const timestamp = Date.now()
     const folderPath = `/clippings/${timestamp}-${slug}`
 
-    // 1. Save index.html
-    await this.drive.put(`${folderPath}/index.html`, b4a.from(html, 'utf8'))
+    let processedHtml = html
 
-    // 2. Save assets
+    // 1. Save assets and rewrite HTML paths
     if (assets.length > 0) {
+      console.log(`[P2P] Saving ${assets.length} assets for clip: ${title}`)
       for (const asset of assets) {
         const assetPath = `${folderPath}/assets/${asset.filename}`
         const buffer = b4a.from(asset.base64, 'base64')
         await this.drive.put(assetPath, buffer)
+        
+        // Rewrite HTML: Replace original URL with relative local path
+        // Simple string replacement is fast and effective here
+        if (asset.originalUrl) {
+          processedHtml = processedHtml.split(asset.originalUrl).join(`./assets/${asset.filename}`)
+        }
       }
     }
+
+    // 2. Save index.html (with rewritten paths)
+    await this.drive.put(`${folderPath}/index.html`, b4a.from(processedHtml, 'utf8'))
 
     const doc = {
       id: 'clip-' + timestamp,
@@ -68,7 +77,7 @@ export class P2PStorage {
     const nb = this.notebooks.find(n => n.id === 'nb-clippings')
     if (nb) nb.count = this.documents['nb-clippings'].length
 
-    console.log(`[P2P] Saved web clip: ${title} (${assets.length} assets)`)
+    console.log(`[P2P] Web clip saved successfully: ${title}`)
     return doc
   }
 

@@ -4,7 +4,11 @@
   "version": "1.0",
   "description": "Capture web pages and sync them to your local P2P Knowledge Base.",
   "permissions": ["activeTab", "scripting"],
-  "host_permissions": ["http://127.0.0.1:44123/*"],
+  "host_permissions": [
+    "http://127.0.0.1:44123/*",
+    "http://localhost:44123/*",
+    "<all_urls>"
+  ],
   "action": {
     "default_popup": "popup.html"
   }
