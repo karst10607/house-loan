@@ -77,6 +77,7 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', async () => {
   if (storage) {
+    await storage._savePeers()
     await storage._saveStats()
     if (storage.swarm) storage.swarm.destroy()
   }

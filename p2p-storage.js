@@ -64,6 +64,7 @@ export class P2PStorage {
     await this.swarm.flush()
 
     console.log('[P2P] Local drive key:', b4a.toString(this.drive.key, 'hex'))
+    console.log('[P2P] Path Debug:', { storage: this.storagePath, peers: this.peersPath })
 
     // Load persisted data
     await this._loadPeers()
@@ -98,8 +99,8 @@ export class P2PStorage {
   async _savePeers() {
     try {
       const keys = Array.from(this.remoteDrives.keys())
-      await fs.writeFile(this.peersPath, JSON.stringify(keys))
-      console.log('[P2P] Saved peers to disk:', keys.length)
+      await fs.writeFile(this.peersPath, JSON.stringify(keys), 'utf8')
+      console.log(`[P2P] Saved ${keys.length} peers to disk: ${this.peersPath}`)
     } catch (e) {
       console.error('[P2P] Failed to save peers:', e.message)
     }
@@ -109,14 +110,20 @@ export class P2PStorage {
     try {
       const data = await fs.readFile(this.peersPath, 'utf8')
       const keys = JSON.parse(data)
-      if (Array.isArray(keys)) {
-        console.log(`[P2P] Found ${keys.length} persisted peers. Reconnecting...`)
-        for (const key of keys) {
-          await this.connectRemote(key, true) // Pass true to skip saving during load
-        }
+      if (Array.isArray(keys) && keys.length > 0) {
+        console.log(`[P2P] Found ${keys.length} persisted peers. Reconnecting in parallel...`)
+        
+        // Use parallel loading so one slow peer doesn't block others
+        await Promise.allSettled(keys.map(key => this.connectRemote(key, true)))
+        
+        console.log('[P2P] Parallel reconnection attempt finished.')
       }
     } catch (e) {
-      // It's okay if file doesn't exist on first run
+      if (e.code === 'ENOENT') {
+        console.log('[P2P] No peers.json found (first run or empty)')
+      } else {
+        console.error('[P2P] Failed to load peers:', e.message)
+      }
     }
   }
 
