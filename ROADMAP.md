@@ -1,50 +1,47 @@
-# P2P 化與社交功能發展藍圖 (Roadmap)
+# 去中心化 P2P 知識庫與協作平台 (Roadmap)
 
-探討將計算機與房貸資料遷移至 Pear (Holepunch) 框架，並實作類似 Facebook 塗鴉牆（多人發文）且支援全文搜尋功能的相關技術挑戰與實作路徑。
+探討將「本機計算與儲存專案」全面升格為「跨平台 P2P 知識協作網絡」，並旨在徹底打破 Notion, Jira, Slack 等 SaaS 平台的 Vendor Lock-in (平台綁架) 限制。
 
-## 技術挑戰與解決方案
+---
 
-### 1. 多人共同留言/發文 (Multi-writer)
-- **困難點**：Pear 的底層結構 `Hypercore` 是僅能附加 (Append-only) 的日誌，預設僅發布者可寫入。P2P 網路中沒有中央伺服器統整留言。
-- **解決方案**：每個使用者建立專屬的 `Hypercore`，並互相訂閱對方的公鑰。搭配 `Autobase` 模組將多個日誌融合 (Merge) 成單一時間軸的塗鴉牆視圖。
-- **後續痛點**：節點發現、狀態同步及新成員獲取現有公鑰清單的處理較為複雜。
+## 🌟 核心架構願景：雙引擎驅動 (Native Bridge Architecture)
+本專案正式升級為「背景引擎 + 瀏覽器擴充」的雙機體系。這是唯一能同時兼顧「底層硬碟網路權限」與「無縫融入日常工作介面」的終極解法：
+- **核心後端 (Electron Background Agent)**：作為安靜常駐的心臟 (Muscle)，負責維運 `Hyperdrive`（本機實體檔案系統/知識圖床）、`Hyperbee`（鍵值/留言資料庫）與 `Hyperswarm`（無中央伺服器的網路打洞連線）。
+- **前端介面 (Chrome Extension frontend)**：作為使用者的眼睛與觸手，負責將「P2P 討論牆」無縫注入使用者的分頁，並向 Electron 下達讀寫指令。
 
-### 2. 全文搜尋引擎 (Full-Text Search)
-- **困難點**：P2P 儲存方案（如 `Hyperbee` 或 `Hyperdrive`）本身並未內建全文搜尋機制。
-- **解決方案**：在本地端建構一套輕量級搜尋引擎（例如整合 `MiniSearch` 或 `Lunr.js`）。當本機透過 P2P 接收到別人的新資料時，在本地解析並建立索引。
-- **後續痛點**：遇到新節點加入或清除快取時，需重新下載並掃描大量歷史貼文以重建索引，可能造成效能瓶頸。
+---
 
-### 3. 架構：結構化資料與二進位檔案分離 (Data & Binary Storage Separation)
-- **困難點**：目前 `storage.js` 透過 IndexedDB 存放將檔案化為 `Blob` 的結構。若轉換至 Pear 生態：
-  - 文字留言、屬性、按讚數應存放於 `Hyperbee`。
-  - 房貸試算的 PDF / 圖片檔案需存於 `Hyperdrive`。
-- **解決方案**：在 `Hyperbee` 貼文之中設計一個關聯欄位（如 `hyper://<public-key>/files/loan.pdf`）。在前端處理非同步加載 UI。
+## 🔑 核心功能目標
 
-### 4. 房貸資料隱私保護與搜尋的衝突 (Privacy & Access Control)
-- **困難點**：房貸資料屬高度隱私，但若直接發佈至公開塗鴉牆可能面臨外洩風險。若透過端到端加密 (End-to-End Encryption) 則會導致 P2P 資料無法再被搜尋。
-- **解決方案**：如需兼具隱私及搜尋，資料必須於本地解密後再轉入本地端的記憶體搜尋引擎建立明文索引。
+### 1. 彈性與跨平台自主認證 (Multi-Platform Identity)
+- 完全拋棄傳統自建的帳號密碼註冊機制。
+- **Session 借用機制**：Extension 根據使用者目前活躍的網頁（如 GitHub, Slack, Workspace），自動借用並驗證既有的登入狀態。使用者可以自由選擇用哪種「身分」進行 P2P 留言。
+- 認證結果將轉為數位簽章附著於 P2P 訊息中，確保不需架設中央伺服器，仍可信任留言者的公司或社群身份。
 
-### 5. 離線與資料持久性 (Data Availability)
-- **困難點**：發布貼文後若立即關機，且無其他連線節點拉取該資料，其他人將無法看見。
-- **解決方案**：架設一台不關機的超級節點 (Pub Node 或 Seeding Server) 以負責持久化儲存和廣播資料，保障基本的可用性體驗。
+### 2. 訂閱制資訊動態流 (P2P Follow / Subscription Model)
+- 提供如同 Twitter(X) 或 RSS 般的強大去中心化訂閱機制：
+- **動態訂閱 (Follow Users)**：直接追蹤某位同事或專家的 P2P Public Key。Electron 在背景會自動為您拉取該對象最新的動作（於 GitHub 的發布、在 Notion 的新註解等）。
+- **專題訂閱 (Follow Repos/Topics)**：追蹤特定的專案/知識庫，任何人在上面發布的 P2P 變更，皆能即時推送至您的全局時間軸 (Activity Wall)。
 
-## 分階段實作計畫
+### 3. P2P 知識圖床與去中心留言牆 (Decentralized Markdown & Social Wall)
+- **知識圖床 (Hyperdrive)**：所有的 Markdown 筆記、架構截圖，全數保留在本機並透過去中心化網路 `hyper://` 提供即時串流渲染。不假手 AWS。
+- **留言社群化 (Autobase Wall)**：在任意平台的網頁側邊注入留言區塊，發言直接寫入 `Hyperbee`。並利用 `Autobase` 融合訂閱者的日誌，將原本分散在不同工具的討論流完美整合回一條時間軸。
 
-### 🌟 願景：打造 100% 資料自主的去中心化知識庫
-本專案的長遠發展目標，是成為徹底取代 Notion、Jira、Google Drive 等 SaaS 服務的「私人/企業 P2P 資料保險箱」，確保每一份文件都實體存在開發者本機，永遠沒有 Vendor Lock-in (平台綁架) 的風險。
+---
 
-- [x] **初步架構革命：成功遷移至標準 Electron 架構**
-  (已達成) 捨棄不穩定的 `pear-electron` 沙盒限制，運用標準的 `electron` 結合極速的 Node 原生 `Hyperdrive` / `Hyperswarm` P2P 網路層，成功實作雙機點對點直接連線與預覽。
+## 📍 分階段實作計畫 (Milestones)
 
-- [ ] **階段一：Markdown 圖床與去中心化文件庫**
-  - 將專案內的文件儲存系統升級，實作對 Markdown 檔案的全面支援。
-  - 將本機的 Hyperdrive 作為「去中心化圖床」：文件內的圖片與附件皆以 `hyper://` 協定載入。
-  - 當遠端節點修改了 Markdown，所有人畫面上的渲染內容即時 (Real-time) 透過 P2P 同步刷新。
+- [x] **Phase 0：P2P 底層引擎就緒**
+  (已達成) 脫離 Pear 沙盒平台，透過 `v1.9.0` 穩固掛載於標準 Electron 上，並實現 P2P 的穩定狀態同步、打洞傳輸與反應式 UI (Reactive UI) 更新。
 
-- [ ] **階段二：Hyperbee 實作動態清單與社群留言牆**
-  - 對於非實體檔案的「動態增長資料」 (如待辦清單、Facebook 式的討論留言串、事件 Log)，導入並掛載 `Hyperbee` (基於 B-Tree 的 P2P 鍵值資料庫)。
-  - 讓不同電腦可以在背景互相推送與寫入一條條的文字紀錄，建立輕量、無主機的社群文字流體驗。
+- [ ] **Phase 1：建構橋接器 (Extension-Electron Bridge)**
+  進入雙機開發階段。撰寫 Chrome Extension 骨架，建立 Extension 與背景 Electron App 之間的通訊通道 (如 Local HTTP server 或 Native Messaging API)，讓擴充可以讀寫 P2P 狀態。
 
-- [ ] **階段三：全功能塗鴉牆與去中心化全局搜尋 (Full-Text Search)**
-  - 導入 `Autobase` 將多人的操作日誌自動 Fuse (融合) 成單一時間軸。
-  - 在本機端結合記憶體型全文搜尋引擎 (如 `MiniSearch`)，只要透過 P2P 把對方的 `Hyperbee` / Markdown 文本拉下來過，就自動建立全文反向索引，徹底擊碎跨平台找不到資料的痛點。
+- [ ] **Phase 2：身分捕獲與 P2P 簡單留言牆 (Identity & Simple Hyperbee)**
+  實作 Extension 讀取 GitHub/Slack 登入身份的邏輯。並在 Electron 端打通 `Hyperbee` 寫入機制，讓使用者能在擴充介面上留下第一筆帶有身份認證的 P2P 留言。
+
+- [ ] **Phase 3：訂閱流與動態渲染 (Subscription & Activity Feeds)**
+  完成 P2P Public Key 的互相追蹤機制 (Follow)。並能在 Extension 介面上動態呈現「訂閱對象」最新推送來的 Markdown 或訊息流，真正擺脫舊版「每次改動都需要重新打包發布 App」的限制。
+
+- [ ] **Phase 4：知識總和與全局搜尋 (Causal Merge & Full-Text Search)**
+  利用 `Autobase` 處理極端情況下多人同時留言的網路邏輯時序。並在本地端引入全文搜尋引擎 (`MiniSearch` 等)，能一句話跨海撈取所有已訂閱節點的文字記錄與圖床檔案，消滅資訊孤島。

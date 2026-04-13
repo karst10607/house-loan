@@ -2,9 +2,13 @@ import Corestore from 'corestore'
 import Hyperdrive from 'hyperdrive'
 import Hyperswarm from 'hyperswarm'
 import b4a from 'b4a'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 
 export class P2PStorage {
   constructor(storagePath) {
+    this.storagePath = storagePath
+    this.peersPath = path.join(storagePath, 'peers.json')
     this.store = new Corestore(storagePath)
     this.drive = null
     this.swarm = null
@@ -47,14 +51,43 @@ export class P2PStorage {
     await this.swarm.flush()
 
     console.log('[P2P] Local drive key:', b4a.toString(this.drive.key, 'hex'))
+
+    // Load persisted peers from disk
+    await this._loadPeers()
+
     return b4a.toString(this.drive.key, 'hex')
+  }
+
+  async _savePeers() {
+    try {
+      const keys = Array.from(this.remoteDrives.keys())
+      await fs.writeFile(this.peersPath, JSON.stringify(keys))
+      console.log('[P2P] Saved peers to disk:', keys.length)
+    } catch (e) {
+      console.error('[P2P] Failed to save peers:', e.message)
+    }
+  }
+
+  async _loadPeers() {
+    try {
+      const data = await fs.readFile(this.peersPath, 'utf8')
+      const keys = JSON.parse(data)
+      if (Array.isArray(keys)) {
+        console.log(`[P2P] Found ${keys.length} persisted peers. Reconnecting...`)
+        for (const key of keys) {
+          await this.connectRemote(key, true) // Pass true to skip saving during load
+        }
+      }
+    } catch (e) {
+      // It's okay if file doesn't exist on first run
+    }
   }
 
   get key() {
     return this.drive && this.drive.key ? b4a.toString(this.drive.key, 'hex') : null
   }
 
-  async connectRemote(hexKey) {
+  async connectRemote(hexKey, isLoading = false) {
     if (this.remoteDrives.has(hexKey)) {
       return { already: true, key: hexKey }
     }
@@ -82,6 +115,12 @@ export class P2PStorage {
     this._scanRemoteDrive(remoteDrive, nbId, hexKey)
 
     console.log('[P2P] Connected to remote:', hexKey)
+
+    // Persist to disk unless we are currently loading
+    if (!isLoading) {
+      await this._savePeers()
+    }
+
     return { already: false, key: hexKey, notebookId: nbId }
   }
 
