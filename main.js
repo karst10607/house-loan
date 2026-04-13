@@ -39,6 +39,11 @@ async function createWindow() {
         mainWindow.webContents.send('state-update', storage.getState())
       }
     }, 2000)
+
+    // Periodic stats saving to disk (every 10 minutes)
+    setInterval(() => {
+      if (storage) storage._saveStats()
+    }, 600000)
   } catch (err) {
     console.error('[Main] P2P Initialization failed:', err)
     // Send error to UI if possible
@@ -70,8 +75,9 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('will-quit', () => {
-  if (storage && storage.swarm) {
-    storage.swarm.destroy()
+app.on('will-quit', async () => {
+  if (storage) {
+    await storage._saveStats()
+    if (storage.swarm) storage.swarm.destroy()
   }
 })

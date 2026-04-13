@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Listen to accurate state updates from Main Process instead of polling
   window.api.onStateUpdate((state) => {
-    updatePeerBadge(state.peerCount || 0)
+    updatePeerBadge(state.peerCount || 0, state.stats)
     
     // Auto-refresh folders and current document list when state changes
     renderFolders(state.notebooks)
@@ -98,25 +98,57 @@ function setupConnectButton() {
   })
 }
 
+// ─── Format helpers ───────────────────────────────────────────
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+function formatTime(ms) {
+  const totalSec = Math.floor(ms / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
+
 // ─── Status badge ─────────────────────────────────────────────
 function buildStatusBadge() {
   const el = document.createElement('div')
   el.id = 'pear-sync-status'
   el.style.cssText = `
-    position:fixed; bottom:8px; right:8px; background:rgba(0,0,0,.6);
-    color:#2dd4bf; padding:4px 10px; border-radius:16px; font-size:11px;
-    z-index:9999; pointer-events:none; backdrop-filter:blur(8px);
-    border:1px solid rgba(45,212,191,.2); display:flex; align-items:center; gap:5px;
+    position:fixed; bottom:8px; right:8px; background:rgba(0,0,0,.7);
+    color:#2dd4bf; padding:6px 12px; border-radius:12px; font-size:11px;
+    z-index:9999; pointer-events:none; backdrop-filter:blur(12px);
+    border:1px solid rgba(45,212,191,.2); display:flex; flex-direction:column; gap:4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   `
-  el.innerHTML = `<span class="status-dot"></span><span class="status-text">v${APP_VERSION} · 0 peers</span>`
+  el.innerHTML = `
+    <div style="display:flex; align-items:center; gap:6px;">
+      <span class="status-dot"></span>
+      <span class="status-text">v${APP_VERSION} · 0 peers</span>
+    </div>
+    <div id="status-stats" style="display:none; border-top:1px solid rgba(45,212,191,0.1); padding-top:4px; font-size:10px; opacity:0.8;">
+      ⌛ 0m · 📤 0 B
+    </div>
+  `
   document.body.appendChild(el)
 }
 
-function updatePeerBadge(count) {
+function updatePeerBadge(count, stats) {
   const textEl = document.querySelector('#pear-sync-status .status-text')
   const dotEl  = document.querySelector('#pear-sync-status .status-dot')
+  const statsEl = document.getElementById('status-stats')
+
   if (textEl) textEl.textContent = `v${APP_VERSION} · ${count} peer${count !== 1 ? 's' : ''}`
   if (dotEl)  dotEl.style.background = count > 0 ? '#2dd4bf' : '#f87171'
+
+  if (stats && statsEl) {
+    statsEl.style.display = 'block'
+    statsEl.textContent = `⌛ ${formatTime(stats.totalSeedTime)} · 📤 ${formatBytes(stats.totalUploadedBytes)}`
+  }
 }
 
 // ─── State loading ────────────────────────────────────────────
@@ -127,7 +159,7 @@ async function loadState() {
     if (keyInput) {
       keyInput.value = state.key || 'Not Ready'
     }
-    updatePeerBadge(state.peerCount || 0)
+    updatePeerBadge(state.peerCount || 0, state.stats)
 
     renderFolders(state.notebooks)
     if (state.notebooks.length > 0) {
@@ -142,6 +174,10 @@ async function loadState() {
     if (keyInput) keyInput.value = 'Failed to load: ' + err.message
   }
 }
+
+// ... updating onStateUpdate as well ...
+// I'll use multi_replace if needed but let's see where onStateUpdate is
+
 
 // ─── Folder Render ────────────────────────────────────────────
 function renderFolders(folders) {

@@ -9,11 +9,17 @@ export class P2PStorage {
   constructor(storagePath) {
     this.storagePath = storagePath
     this.peersPath = path.join(storagePath, 'peers.json')
+    this.statsPath = path.join(storagePath, 'stats.json')
     this.store = new Corestore(storagePath)
     this.drive = null
     this.swarm = null
     this.remoteDrives = new Map()
     this.peerCount = 0
+
+    // Stats
+    this.sessionStartTime = Date.now()
+    this.persistedSeedTime = 0 // ms
+    this.totalUploadedBytes = 0
 
     this.notebooks = [
       { id: 'nb-1', title: '預設資料夾', count: 0 }
@@ -47,15 +53,46 @@ export class P2PStorage {
       if (this.onPeerChange) this.onPeerChange(this.peerCount)
     })
 
+    // Monitor upload traffic across all cores in the store
+    this.store.on('core', (core) => {
+      core.on('upload', (index, byteLength) => {
+        this.totalUploadedBytes += byteLength
+      })
+    })
+
     this.swarm.join(this.drive.discoveryKey)
     await this.swarm.flush()
 
     console.log('[P2P] Local drive key:', b4a.toString(this.drive.key, 'hex'))
 
-    // Load persisted peers from disk
+    // Load persisted data
     await this._loadPeers()
+    await this._loadStats()
 
     return b4a.toString(this.drive.key, 'hex')
+  }
+
+  async _saveStats() {
+    try {
+      const currentSessionTime = Date.now() - this.sessionStartTime
+      const data = {
+        totalSeedTime: this.persistedSeedTime + currentSessionTime,
+        totalUploadedBytes: this.totalUploadedBytes
+      }
+      await fs.writeFile(this.statsPath, JSON.stringify(data))
+    } catch (e) {
+      console.error('[P2P] Failed to save stats:', e.message)
+    }
+  }
+
+  async _loadStats() {
+    try {
+      const data = JSON.parse(await fs.readFile(this.statsPath, 'utf8'))
+      this.persistedSeedTime = data.totalSeedTime || 0
+      this.totalUploadedBytes = data.totalUploadedBytes || 0
+    } catch (e) {
+      // First run
+    }
   }
 
   async _savePeers() {
@@ -263,11 +300,16 @@ export class P2PStorage {
   }
 
   getState() {
+    const currentSessionTime = Date.now() - this.sessionStartTime
     return {
       notebooks: this.notebooks,
       documents: this.documents,
       key: this.key,
-      peerCount: this.peerCount
+      peerCount: this.peerCount,
+      stats: {
+        totalSeedTime: this.persistedSeedTime + currentSessionTime,
+        totalUploadedBytes: this.totalUploadedBytes
+      }
     }
   }
 }
