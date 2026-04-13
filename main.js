@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'path'
+import http from 'http'
 import { fileURLToPath } from 'url'
 import { P2PStorage } from './p2p-storage.js'
 
@@ -27,9 +28,41 @@ async function createWindow() {
   mainWindow.loadFile('index.html')
 
   try {
-    // Initialize P2P Storage (Main Process / Node Environment)
+    // Initialize P2P Storage
     console.log('[Main] Initializing P2P Storage...')
     storage = new P2PStorage(storagePath)
+
+    // --- Web Clipper Receiver (Port 44123) ---
+    // Start this BEFORE storage.ready() so it's responsive immediately
+    http.createServer((req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      if (req.method === 'OPTIONS') return res.end()
+
+      if (req.method === 'POST' && req.url === '/api/clip') {
+        let body = ''
+        req.on('data', chunk => { body += chunk })
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body)
+            await storage.saveClip(data.title, data.url, data.html, data.assets)
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('state-update', storage.getState())
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true }))
+          } catch (err) {
+            res.writeHead(500); res.end(err.message)
+          }
+        })
+      } else {
+        res.writeHead(404); res.end()
+      }
+    }).listen(44123, '127.0.0.1', () => {
+      console.log('[Main] Clipper Bridge listening on http://127.0.0.1:44123')
+    })
+
     await storage.ready()
     console.log('[Main] P2P Storage Ready.')
     

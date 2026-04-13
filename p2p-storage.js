@@ -22,11 +22,54 @@ export class P2PStorage {
     this.totalUploadedBytes = 0
 
     this.notebooks = [
-      { id: 'nb-1', title: '預設資料夾', count: 0 }
+      { id: 'nb-1', title: '預設資料夾', count: 0 },
+      { id: 'nb-clippings', title: '📦 網頁快照', count: 0 }
     ]
-    this.documents = { 'nb-1': [] }
+    this.documents = { 'nb-1': [], 'nb-clippings': [] }
 
     this.onPeerChange = null
+  }
+
+  // ... (keeping other methods same)
+
+  async saveClip(title, url, html, assets = []) {
+    if (!this.drive) throw new Error('Drive not ready')
+    
+    // Create a safe slug for the folder
+    const slug = title.replace(/[^\w\s-]/g, '').slice(0, 30).trim().replace(/\s+/g, '-')
+    const timestamp = Date.now()
+    const folderPath = `/clippings/${timestamp}-${slug}`
+
+    // 1. Save index.html
+    await this.drive.put(`${folderPath}/index.html`, b4a.from(html, 'utf8'))
+
+    // 2. Save assets
+    if (assets.length > 0) {
+      for (const asset of assets) {
+        const assetPath = `${folderPath}/assets/${asset.filename}`
+        const buffer = b4a.from(asset.base64, 'base64')
+        await this.drive.put(assetPath, buffer)
+      }
+    }
+
+    const doc = {
+      id: 'clip-' + timestamp,
+      title: '🌐 ' + title,
+      path: `${folderPath}/index.html`,
+      type: 'text',
+      mime: 'text/html',
+      date: new Date().toLocaleDateString(),
+      url: url
+    }
+
+    if (!this.documents['nb-clippings']) this.documents['nb-clippings'] = []
+    this.documents['nb-clippings'].push(doc)
+
+    const nb = this.notebooks.find(n => n.id === 'nb-clippings')
+    if (nb) nb.count = this.documents['nb-clippings'].length
+
+    console.log(`[P2P] Saved web clip: ${title} (${assets.length} assets)`)
+    return doc
   }
 
   async ready() {
