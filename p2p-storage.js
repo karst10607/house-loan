@@ -55,12 +55,16 @@ export class P2PStorage {
     const year = now.getFullYear().toString()
     const month = (now.getMonth() + 1).toString().padStart(2, '0')
     const day = now.getDate().toString().padStart(2, '0')
-    const slug = title
+    
+    // Better Slugify: Support Chinese characters, but keep it filesystem safe
+    let slug = title
       .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
+      .replace(/[<>:"/\\|?*]/g, '') // Remove invalid Windows filename characters
       .trim()
-      .replace(/\s+/g, '-')
-      .slice(0, 30)
+      .replace(/\s+/g, '-')         // Space to hyphen
+      .slice(0, 50)                 // Limit length
+    
+    if (!slug) slug = 'untitled-' + Date.now()
     
     const folderPath = `/clippings/${year}/${month}/${day}-${slug}`
 

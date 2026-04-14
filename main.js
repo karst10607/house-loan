@@ -142,13 +142,17 @@ async function createWindow() {
 
       if (req.method === 'POST' && req.url === '/api/clip') {
         let body = ''
+        console.log('[Bridge] Incoming clipping request...')
         req.on('data', chunk => { body += chunk })
         req.on('end', async () => {
           try {
             const data = JSON.parse(body)
-            
+            console.log(`[Bridge] Received: ${data.title} (${body.length} bytes)`)
+
             // 1. P2P Storage
+            if (!storage || !storage.getDrive()) throw new Error('Storage Not Ready')
             await storage.saveClip(data.title, data.url, data.markdown, data.assets)
+            console.log('[Bridge] P2P Save complete')
 
             // 2. Custom Local Hard Drive Backup (Hierarchical)
             try {
@@ -156,15 +160,19 @@ async function createWindow() {
               const year = now.getFullYear().toString()
               const month = (now.getMonth() + 1).toString().padStart(2, '0')
               const day = now.getDate().toString().padStart(2, '0')
-              const slug = data.title
+              
+              let slug = data.title
                 .toLowerCase()
-                .replace(/[^\w\s-]/g, '')
+                .replace(/[<>:"/\\|?*]/g, '')
                 .trim()
                 .replace(/\s+/g, '-')
-                .slice(0, 30)
+                .slice(0, 50)
+              
+              if (!slug) slug = 'untitled-' + now.getTime()
 
               const clipDir = path.join(clipperPath, year, month, `${day}-${slug}`)
               await fs.mkdir(clipDir, { recursive: true })
+              console.log(`[Bridge] Local directory: ${clipDir}`)
               await fs.mkdir(path.join(clipDir, 'assets'), { recursive: true })
 
               await fs.writeFile(path.join(clipDir, 'index.md'), data.markdown, 'utf8')
