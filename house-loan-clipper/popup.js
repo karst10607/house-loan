@@ -1,75 +1,96 @@
 document.getElementById('clip-btn').addEventListener('click', async () => {
-  const status = document.getElementById('status');
-  status.textContent = 'Scanning assets...';
-
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    // 1. Extract DOM and image URLs
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        // Find all images and resolve their full URLs
-        const imgs = Array.from(document.querySelectorAll('img')).map(img => img.src).filter(src => src && src.startsWith('http'));
-        const uniqueImgs = [...new Set(imgs)]; // Remove duplicates
-        
-        return {
-          html: document.documentElement.outerHTML,
-          title: document.title,
-          url: window.location.href,
-          imageUrls: uniqueImgs
-        };
-      }
-    });
-
-    const { html, title, url, imageUrls } = results[0].result;
-    const assets = [];
-
-    // 2. Fetch images in the extension (bypasses most CORS)
-    status.textContent = `Downloading ${imageUrls.length} images...`;
-    
-    for (let i = 0; i < imageUrls.length; i++) {
-        const imgUrl = imageUrls[i];
-        try {
-            const resp = await fetch(imgUrl);
-            const blob = await resp.blob();
-            
-            // Convert to base64 to send over JSON
-            const reader = new FileReader();
-            const b64 = await new Promise((resolve) => {
-                reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                reader.readAsDataURL(blob);
-            });
-
-            // Extract filename from URL or use a hash
-            const filename = imgUrl.split('/').pop().split('?')[0] || `img-${i}.jpg`;
-            
-            assets.push({
-                originalUrl: imgUrl,
-                filename: filename.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? filename : `${filename}.jpg`,
-                base64: b64
-            });
-            status.textContent = `Down: ${i+1}/${imageUrls.length}...`;
-        } catch (e) {
-            console.warn('Failed to fetch image:', imgUrl, e);
+    const status = document.getElementById('status');
+    status.textContent = 'Analyzing page structure...';
+  
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      
+      // 1. Smart Asset Extraction (Handles Lazy Loading & Background Images)
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          const images = [];
+          
+          // A. Scan <img> tags (Priority: data-original / data-src > src)
+          document.querySelectorAll('img').forEach(img => {
+              // Real Estate sites like 591 use data-original for high-res carousel photos
+              const src = img.dataset.original || img.dataset.src || img.getAttribute('src');
+              if (src) {
+                  // Resolve relative URLs to absolute
+                  const absoluteUrl = new URL(src, document.baseURI).href;
+                  if (absoluteUrl.startsWith('http')) images.push(absoluteUrl);
+              }
+          });
+          
+          // B. Scan elements with Background Images (Common for map thumbnails / UI)
+          document.querySelectorAll('*').forEach(el => {
+              const bg = window.getComputedStyle(el).backgroundImage;
+              if (bg && bg !== 'none' && bg.startsWith('url')) {
+                  const match = bg.match(/url\(["']?(.*?)["']?\)/);
+                  if (match && match[1]) {
+                      const absoluteUrl = new URL(match[1], document.baseURI).href;
+                      if (absoluteUrl.startsWith('http')) images.push(absoluteUrl);
+                  }
+              }
+          });
+  
+          return {
+            html: document.documentElement.outerHTML,
+            title: document.title,
+            url: window.location.href,
+            imageUrls: [...new Set(images)] // Dedup
+          };
         }
+      });
+  
+      const { html, title, url, imageUrls } = results[0].result;
+      const assets = [];
+  
+      // 2. Fetch images in background to bypass CORS/Anti-leech
+      status.textContent = `Capturing ${imageUrls.length} assets...`;
+      
+      for (let i = 0; i < imageUrls.length; i++) {
+          const imgUrl = imageUrls[i];
+          try {
+              const resp = await fetch(imgUrl);
+              if (!resp.ok) continue;
+              const blob = await resp.blob();
+              
+              const reader = new FileReader();
+              const b64 = await new Promise((resolve) => {
+                  reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                  reader.readAsDataURL(blob);
+              });
+  
+              const rawFilename = imgUrl.split('/').pop().split('?')[0] || `asset-${i}.jpg`;
+              const filename = rawFilename.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? rawFilename : `${rawFilename}.jpg`;
+              
+              assets.push({
+                  originalUrl: imgUrl,
+                  filename: filename,
+                  base64: b64
+              });
+              status.textContent = `Progress: ${i+1}/${imageUrls.length}...`;
+          } catch (e) {
+              console.warn('[Clipper] Skip failed asset:', imgUrl);
+          }
+      }
+  
+      // 3. Dispatch to P2P Bridge
+      status.textContent = 'Syncing to P2P App...';
+      const response = await fetch('http://127.0.0.1:44123/api/clip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, url, html, assets })
+      });
+  
+      if (response.ok) {
+        status.textContent = 'Success! Assets Persisted.';
+      } else {
+        const errText = await response.text();
+        status.textContent = 'Sync Error: ' + errText;
+      }
+    } catch (err) {
+      status.textContent = 'Error: ' + err.message;
     }
-
-    // 3. Send to Electron
-    status.textContent = 'Uploading to P2P App...';
-    const response = await fetch('http://127.0.0.1:44123/api/clip', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, url, html, assets })
-    });
-
-    if (response.ok) {
-      status.textContent = 'Success! Saved Assets.';
-    } else {
-      const errText = await response.text();
-      status.textContent = 'Error: ' + errText;
-    }
-  } catch (err) {
-    status.textContent = 'Error: ' + err.message;
-  }
-});
+  });

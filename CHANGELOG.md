@@ -1,11 +1,18 @@
 # CHANGELOG
 
-## v1.11.0 (2026-04-13)
+## v1.11.2 (2026-04-14)
 
-### 🧺 資產打包與路徑改寫 (Asset Bundling Milestone)
-- **原始圖檔擷取**：套件現在會下載網頁所有圖片，而非使用 Base64。
-- **HTML 路徑改寫**：自動將遠端圖片連結替換為本地相對路徑，確保離線與 P2P 同步品質。
-- **連線優化**：修復 Chrome Extension 與 Electron 之間的通訊授權問題。
+### 🧠 智能擷取升級 (Smart Extraction Upgrade)
+- **支援懶加載圖片**：現在能自動偵測 `data-original` 與 `data-src` 屬性，解決 591 售屋網等網站 carousel 圖片抓取失敗的問題。
+- **CSS 背景圖偵測**：掃描並下載以 `background-image` 定義的資源（如地圖縮圖、UI 圖示）。
+- **路徑重定向強化**：確保所有類型的資源在儲存後都能正確指向 `./assets/` 資料夾。
+
+## v1.11.1 (2026-04-14)
+
+### 🩺 通訊與穩定性強化 (Clipper Hotfix)
+- **連線修復 (PNA Support)**：加入 `Access-Control-Allow-Private-Network` 標頭，解決 Chrome 擴充功能連線至 localhost 的安全性阻斷問題。
+- **後端通訊優化**：優化了網頁快照接收層的啟動順序，並加入詳細傳輸日誌以便排錯。
+- **版本號對齊**：修正了 App 與套件版本顯示不一致的問題。
 
 ## v1.10.0 (2026-04-13)
 
