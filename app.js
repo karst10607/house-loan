@@ -1,7 +1,7 @@
 /* Electron Renderer Process */
 
 // ─── App version ─────────────────────────────────────────────
-const APP_VERSION = '1.15.0'
+const APP_VERSION = '1.16.0'
 
 // ─── Base64 helpers ──────────────────────────────────────────
 function bufferToBase64(buffer) {
@@ -177,16 +177,11 @@ async function loadState() {
 }
 
 // ... updating onStateUpdate as well ...
-// I'll use multi_replace if needed but let's see where onStateUpdate is
-
-
 // ─── Folder Render ────────────────────────────────────────────
 function renderFolders(folders) {
   const ul = document.getElementById('folders-list')
   if (!ul) return
   
-  // To avoid flickering, we can check if content changed, 
-  // but for this scale, direct re-render is usually fine.
   ul.innerHTML = ''
   folders.forEach(f => {
     const li = document.createElement('li')
@@ -220,50 +215,98 @@ function selectFolder(id, docs) {
 }
 
 // ─── Doc Render ───────────────────────────────────────────────
+function buildFileTree(docs) {
+  const tree = { name: 'root', type: 'folder', children: {}, path: '' }
+  
+  docs.forEach(doc => {
+    const cleanPath = doc.path.startsWith('/') ? doc.path.slice(1) : doc.path
+    const parts = cleanPath.split('/')
+    
+    let current = tree
+    parts.forEach((part, index) => {
+      const isFile = index === parts.length - 1
+      if (isFile) {
+        current.children[part] = { ...doc, name: doc.title, type: 'file' }
+      } else {
+        if (!current.children[part]) {
+          current.children[part] = { 
+            name: part, 
+            type: 'folder', 
+            children: {}, 
+            path: parts.slice(0, index + 1).join('/') 
+          }
+        }
+        current = current.children[part]
+      }
+    })
+  })
+  return tree
+}
+
 function renderDocs(docs) {
-  const ul = document.getElementById('docs-list')
-  if (!ul) return
-  ul.innerHTML = ''
+  const container = document.getElementById('docs-list')
+  if (!container) return
+  container.innerHTML = ''
 
   if (!docs || docs.length === 0) {
-    ul.innerHTML = '<li class="empty-state">尚無文件<br>點選上方 ↑ 上傳</li>'
+    container.innerHTML = '<li class="empty-state">尚無文件<br>點選上方 ↑ 上傳</li>'
     return
   }
 
-  docs.forEach(doc => {
-    const li = document.createElement('li')
-    const typeClass = doc.type === 'pdf' ? 'type-pdf' : 'type-img'
+  const tree = buildFileTree(docs)
+  
+  function createTreeUI(node, depth = 0) {
+    const ul = document.createElement('ul')
+    ul.className = depth === 0 ? 'tree-root' : 'tree-sub'
     
-    // Only show delete button for non-remote documents
-    const deleteBtnHtml = !doc.remote ? `
-      <div class="doc-actions">
-        <button class="doc-delete-btn" title="刪除檔案">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-        </button>
-      </div>` : ''
+    // Sort children: folders first, then files
+    const sortedKeys = Object.keys(node.children || {}).sort((a, b) => {
+      const nodeA = node.children[a]
+      const nodeB = node.children[b]
+      if (nodeA.type === nodeB.type) return a.localeCompare(b)
+      return nodeA.type === 'folder' ? -1 : 1
+    })
 
-    li.innerHTML = `
-      <div class="doc-info">
-        <span class="doc-title">${doc.title}</span>
-        <span class="doc-date">${doc.date}</span>
-      </div>
-      <span class="doc-type ${typeClass}">${doc.type.toUpperCase()}</span>
-      ${deleteBtnHtml}
-    `
-    
-    li.addEventListener('click', () => loadAndPreviewDocument(doc))
-    
-    // Setup delete event
-    const delBtn = li.querySelector('.doc-delete-btn')
-    if (delBtn) {
-      delBtn.addEventListener('click', (e) => {
-        e.stopPropagation() // Don't trigger preview
-        handleDeleteFile(doc)
-      })
-    }
-    
-    ul.appendChild(li)
-  })
+    sortedKeys.forEach(key => {
+      const child = node.children[key]
+      const li = document.createElement('li')
+      li.className = `tree-item ${child.type === 'folder' ? 'is-folder' : 'is-file'}`
+      if (child.type === 'folder') li.classList.add('expanded')
+      
+      const row = document.createElement('div')
+      row.className = 'tree-row'
+      row.style.paddingLeft = `${depth * 14 + 10}px`
+      
+      const icon = child.type === 'folder' ? '📁' : '📄'
+      const label = child.type === 'file' ? child.title : key
+      
+      row.innerHTML = `
+        <span class="tree-icon">${icon}</span>
+        <span class="tree-label" title="${label}">${label}</span>
+      `
+
+      if (child.type === 'folder') {
+        li.appendChild(row)
+        li.appendChild(createTreeUI(child, depth + 1))
+        
+        row.addEventListener('click', (e) => {
+          e.stopPropagation()
+          li.classList.toggle('expanded')
+        })
+      } else {
+        li.appendChild(row)
+        row.addEventListener('click', () => {
+          document.querySelectorAll('.tree-row').forEach(el => el.classList.remove('active'))
+          row.classList.add('active')
+          loadAndPreviewDocument(child)
+        })
+      }
+      ul.appendChild(li)
+    })
+    return ul
+  }
+
+  container.appendChild(createTreeUI(tree))
 }
 
 // ─── Delete ───────────────────────────────────────────────────
