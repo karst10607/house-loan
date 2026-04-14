@@ -149,48 +149,60 @@ async function createWindow() {
             const data = JSON.parse(body)
             console.log(`[Bridge] Received: ${data.title} (${body.length} bytes)`)
 
-            // 1. P2P Storage
-            if (!storage || !storage.getDrive()) throw new Error('Storage Not Ready')
-            await storage.saveClip(data.title, data.url, data.markdown, data.assets)
-            console.log('[Bridge] P2P Save complete')
+            // 1. Determine Target Path (Local First)
+            const now = new Date()
+            const year = now.getFullYear().toString()
+            const month = (now.getMonth() + 1).toString().padStart(2, '0')
+            const day = now.getDate().toString().padStart(2, '0')
+            
+            let slug = data.title
+              .toLowerCase()
+              .replace(/[<>:"/\\|?*]/g, '')
+              .trim()
+              .replace(/\s+/g, '-')
+              .slice(0, 50)
+            
+            if (!slug) slug = 'untitled-' + now.getTime()
 
-            // 2. Custom Local Hard Drive Backup (Hierarchical)
+            // If syncPath is set, save directly into the Sync Directory (The Dropbox Way)
+            const baseDir = syncPath || clipperPath
+            const clipDir = path.join(baseDir, year, month, `${day}-${slug}`)
+            
+            // 2. Perform Local HDD Save (High Priority)
             try {
-              const now = new Date()
-              const year = now.getFullYear().toString()
-              const month = (now.getMonth() + 1).toString().padStart(2, '0')
-              const day = now.getDate().toString().padStart(2, '0')
-              
-              let slug = data.title
-                .toLowerCase()
-                .replace(/[<>:"/\\|?*]/g, '')
-                .trim()
-                .replace(/\s+/g, '-')
-                .slice(0, 50)
-              
-              if (!slug) slug = 'untitled-' + now.getTime()
-
-              const clipDir = path.join(clipperPath, year, month, `${day}-${slug}`)
               await fs.mkdir(clipDir, { recursive: true })
-              console.log(`[Bridge] Local directory: ${clipDir}`)
               await fs.mkdir(path.join(clipDir, 'assets'), { recursive: true })
-
               await fs.writeFile(path.join(clipDir, 'index.md'), data.markdown, 'utf8')
               for (const asset of data.assets) {
                 await fs.writeFile(path.join(clipDir, 'assets', asset.filename), Buffer.from(asset.base64, 'base64'))
               }
-              console.log(`[Main] Local hierarchical backup saved to: ${clipDir}`)
+              console.log(`[Bridge] Local HDD Save OK: ${clipDir}`)
             } catch (err) {
-              console.warn('[Main] Local backup failed:', err.message)
+              console.error('[Bridge] Local backup FAILED:', err.message)
+              // We still continue to respond success if P2P might work, or fail if HDD is essential
             }
 
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('state-update', storage.getState())
-            }
+            // 3. IMMEDIATE RESPONSE to Extension (End the "Syncing..." hang)
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: true }))
+            console.log('[Bridge] Responded SUCCESS to Extension mid-process')
+
+            // 4. Background P2P Sync (Low Priority / Fire-and-Forget)
+            if (storage && storage.getDrive()) {
+              storage.saveClip(data.title, data.url, data.markdown, data.assets)
+                .then(() => {
+                  console.log('[Bridge] Background P2P sync complete')
+                  if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('state-update', storage.getState())
+                  }
+                })
+                .catch(e => console.error('[Bridge] Background P2P sync failed:', e.message))
+            }
           } catch (err) {
-            res.writeHead(500); res.end(err.message)
+            console.error('[Bridge] Fatal request error:', err.message)
+            if (!res.writableEnded) {
+              res.writeHead(500); res.end(err.message)
+            }
           }
         })
       } else {
