@@ -137,8 +137,69 @@ export class P2PStorage {
     // Load persisted data
     await this._loadPeers()
     await this._loadStats()
+    
+    // Rebuild document index from Hyperdrive
+    await this.rebuildIndex()
 
     return b4a.toString(this.drive.key, 'hex')
+  }
+
+  async rebuildIndex() {
+    if (!this.drive) return
+    console.log('[P2P] Rebuilding Index...')
+    const clippings = []
+    const defaults = []
+
+    try {
+      for await (const entry of this.drive.list('/', { recursive: true })) {
+        if (entry.value.type !== 'file') continue
+        
+        const path = entry.key
+        const filename = path.split('/').pop()
+        
+        // 1. Identify Clippings (index.md in hierarchy)
+        if (path.startsWith('/clippings/') && filename === 'index.md') {
+          // Extract a human title from the path slug if needed, but App will parse Frontmatter later
+          // For now, we'll use a placeholder or the last segment of the path
+          const segments = path.split('/')
+          const slug = segments[segments.length - 2] || 'Untitled'
+          
+          clippings.push({
+            id: 'clip-' + Date.now() + Math.random(),
+            title: '🌐 ' + slug,
+            path: path,
+            type: 'text',
+            mime: 'text/markdown',
+            date: new Date(entry.value.mtime).toLocaleDateString(),
+            url: '' // Will be populated by Frontmatter on preview
+          })
+        } 
+        // 2. Identify Normal Uploads
+        else if (path.startsWith('/uploads/')) {
+          defaults.push({
+            id: 'doc-' + Date.now() + Math.random(),
+            title: filename,
+            path: path,
+            type: filename.match(/\.(jpg|jpeg|png|gif)$/i) ? 'image' : 'text',
+            mime: filename.endsWith('.pdf') ? 'application/pdf' : 'text/plain',
+            date: new Date(entry.value.mtime).toLocaleDateString()
+          })
+        }
+      }
+
+      this.documents['nb-clippings'] = clippings
+      this.documents['nb-1'] = defaults
+      
+      const nbClippings = this.notebooks.find(n => n.id === 'nb-clippings')
+      if (nbClippings) nbClippings.count = clippings.length
+      
+      const nbDefault = this.notebooks.find(n => n.id === 'nb-1')
+      if (nbDefault) nbDefault.count = defaults.length
+
+      console.log(`[P2P] Index rebuilt: ${clippings.length} clippings, ${defaults.length} uploads.`)
+    } catch (e) {
+      console.error('[P2P] Index rebuild failed:', e.message)
+    }
   }
 
   async _saveStats() {

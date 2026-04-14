@@ -72,10 +72,34 @@ async function startSyncEngine() {
   })
 
   // 3. P2P Watcher: P2P -> Local
-  drive.core.on('append', async () => {
-    // Basic implementation: re-scan or react to specific changes
-    // For simplicity, we can use drive.list('/') logic again or better:
-    // we'd need more complex tracking, but let's do a simple periodic re-sync for now
+  const syncP2pToLocal = async () => {
+    console.log('[Sync] P2P -> Local Sync Triggered')
+    try {
+      for await (const entry of drive.list('/')) {
+        if (entry.value.type !== 'file') continue
+        if (entry.key.startsWith('/.trash')) continue
+        
+        const localFile = path.join(syncPath, entry.key)
+        const localDir = path.dirname(localFile)
+        
+        // Only download if missing or different mtime/size
+        try {
+          const localStats = await fs.stat(localFile)
+          if (localStats.size === entry.value.size) continue 
+        } catch (e) { /* File doesn't exist, proceed to download */ }
+
+        await fs.mkdir(localDir, { recursive: true })
+        const content = await drive.get(entry.key)
+        await fs.writeFile(localFile, content)
+        console.log(`[Sync] P2P -> Local: ${entry.key}`)
+      }
+    } catch (e) { console.error('[Sync] P2P->Local failed:', e.message) }
+  }
+
+  drive.core.on('append', () => {
+    // Debounce to avoid constant scanning during batch updates
+    clearTimeout(drive._syncTimer)
+    drive._syncTimer = setTimeout(syncP2pToLocal, 2000)
   })
 }
 
