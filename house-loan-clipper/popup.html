@@ -2,19 +2,49 @@
 <html>
 <head>
   <style>
-    body { width: 250px; font-family: sans-serif; padding: 10px; background: #1e1e1e; color: #fff; }
-    button { 
-      width: 100%; padding: 10px; background: #2dd4bf; border: none; 
-      border-radius: 4px; cursor: pointer; color: #000; font-weight: bold;
+    :root {
+      --bg: #1e1e1e;
+      --accent: #2dd4bf;
+      --text: #e8e8f0;
+      --dim: #888;
     }
-    button:hover { background: #24b09e; }
-    .status { margin-top: 10px; font-size: 11px; color: #888; }
+    body { width: 320px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 12px; background: var(--bg); color: var(--text); margin: 0; }
+    h3 { font-size: 14px; margin: 0 0 12px; color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase; }
+    
+    #preview-container {
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      min-height: 80px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .preview-header { font-weight: 600; font-size: 13px; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .preview-meta { font-size: 11px; color: var(--dim); display: flex; gap: 8px; }
+
+    button { 
+      width: 100%; padding: 10px; background: var(--accent); border: none; 
+      border-radius: 6px; cursor: pointer; color: #000; font-weight: 700;
+      transition: transform 0.1s, background 0.2s;
+    }
+    button:hover { background: #24b09e; transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+    button:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+    .status { margin-top: 10px; font-size: 11px; color: var(--dim); text-align: center; }
   </style>
 </head>
 <body>
-  <h3>P2P Knowledge Clipper</h3>
-  <button id="clip-btn">Save Current Page</button>
-  <div id="status" class="status">Ready to clip</div>
+  <h3>P2P Smart Clipper</h3>
+  <div id="preview-container">
+    <div id="preview-title" class="preview-header">Analyzing page...</div>
+    <div class="preview-meta">
+      <span id="img-count">📸 -- images</span>
+      <span id="char-count">📄 -- chars</span>
+    </div>
+  </div>
+  <button id="clip-btn" disabled>Save Article (GFM)</button>
+  <div id="status" class="status">Initialing...</div>
   <script src="popup.js"></script>
 </body>
 </html>

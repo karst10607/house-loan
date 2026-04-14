@@ -152,18 +152,8 @@ body {
   overflow: hidden;
 }
 
+/* Sidebar Header & Clipper Settings */
 .sidebar-header {
-  height: 48px;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border);
-  letter-spacing: 0.03em;
 }
 
 .logo-icon { width: 18px; height: 18px; flex-shrink: 0; }

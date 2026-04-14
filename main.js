@@ -1,14 +1,31 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import path from 'path'
 import http from 'http'
+import fs from 'fs/promises'
 import { fileURLToPath } from 'url'
 import { P2PStorage } from './p2p-storage.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const storagePath = path.join(app.getPath('userData'), 'p2p-storage')
+const settingsPath = path.join(app.getPath('userData'), 'settings.json')
 
 let storage = null
 let mainWindow = null
+let clipperPath = ''
+
+async function loadSettings() {
+  try {
+    const data = JSON.parse(await fs.readFile(settingsPath, 'utf8'))
+    clipperPath = data.clipperPath
+  } catch (e) {
+    // Default to Documents/HouseLoan_Clippings
+    clipperPath = path.join(app.getPath('documents'), 'HouseLoan_Clippings')
+  }
+}
+
+async function saveSettings() {
+  await fs.writeFile(settingsPath, JSON.stringify({ clipperPath }), 'utf8')
+}
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -32,36 +49,49 @@ async function createWindow() {
     console.log('[Main] Initializing P2P Storage...')
     storage = new P2PStorage(storagePath)
 
+    // Init Settings
+    await loadSettings()
+
     // --- Web Clipper Receiver (Port 44123) ---
-    // Start this BEFORE storage.ready() so it's responsive immediately
     const clipperServer = http.createServer((req, res) => {
-      // Standard CORS + Private Network Access (PNA) headers
       res.setHeader('Access-Control-Allow-Origin', '*')
       res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-      res.setHeader('Access-Control-Allow-Private-Network', 'true') // Required for Chrome PNA
+      res.setHeader('Access-Control-Allow-Private-Network', 'true')
       
-      if (req.method === 'OPTIONS') {
-        res.writeHead(204)
-        return res.end()
-      }
+      if (req.method === 'OPTIONS') { res.writeHead(204); return res.end() }
 
       if (req.method === 'POST' && req.url === '/api/clip') {
-        console.log('[Main] Clipper Bridge: Receiving snapshot...')
         let body = ''
         req.on('data', chunk => { body += chunk })
         req.on('end', async () => {
           try {
             const data = JSON.parse(body)
-            console.log(`[Main] Clipper Bridge: Parsing ${Math.round(body.length / 1024)}KB payload...`)
-            await storage.saveClip(data.title, data.url, data.html, data.assets)
+            
+            // 1. P2P Storage
+            await storage.saveClip(data.title, data.url, data.markdown, data.assets)
+
+            // 2. Custom Local Hard Drive Backup
+            try {
+              const clipDir = path.join(clipperPath, `${Date.now()}-${data.title.replace(/[^\w\s-]/g, '').slice(0, 30).trim().replace(/\s+/g, '-')}`)
+              await fs.mkdir(clipDir, { recursive: true })
+              await fs.mkdir(path.join(clipDir, 'assets'), { recursive: true })
+
+              await fs.writeFile(path.join(clipDir, 'index.md'), data.markdown, 'utf8')
+              for (const asset of data.assets) {
+                await fs.writeFile(path.join(clipDir, 'assets', asset.filename), Buffer.from(asset.base64, 'base64'))
+              }
+              console.log(`[Main] Local backup saved to: ${clipDir}`)
+            } catch (err) {
+              console.warn('[Main] Local backup failed:', err.message)
+            }
+
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('state-update', storage.getState())
             }
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: true }))
           } catch (err) {
-            console.error('[Main] Clipper Bridge Error:', err.message)
             res.writeHead(500); res.end(err.message)
           }
         })
@@ -113,6 +143,23 @@ ipcMain.handle('save-file', async (e, notebookId, fileObj) => await storage.save
 ipcMain.handle('read-file', async (e, filePath, remoteKey) => await storage.readFile(filePath, remoteKey))
 ipcMain.handle('connect-remote', async (e, hexKey) => await storage.connectRemote(hexKey))
 ipcMain.handle('delete-file', async (e, notebookId, docId) => await storage.deleteFile(notebookId, docId))
+
+// Clipper Settings & Folder Ops
+ipcMain.handle('get-clipper-path', () => clipperPath)
+ipcMain.handle('select-clipper-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory']
+  })
+  if (!result.canceled && result.filePaths.length > 0) {
+    clipperPath = result.filePaths[0]
+    await saveSettings()
+    return clipperPath
+  }
+  return null
+})
+ipcMain.handle('open-clippings-folder', async () => {
+  await shell.openPath(clipperPath)
+})
 
 ipcMain.on('window-control', (e, action) => {
   if (!mainWindow) return

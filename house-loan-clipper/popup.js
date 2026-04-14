@@ -1,99 +1,168 @@
+const state = {
+  title: '',
+  url: '',
+  markdown: '',
+  imageUrls: [],
+  assets: []
+};
+
+// 1. Initial Analysis on Load
+document.addEventListener('DOMContentLoaded', async () => {
+    const status = document.getElementById('status');
+    const titleEl = document.getElementById('preview-title');
+    const imgEl = document.getElementById('img-count');
+    const charEl = document.getElementById('char-count');
+    const clipBtn = document.getElementById('clip-btn');
+
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        state.url = tab.url;
+
+        status.textContent = 'Analyzing content...';
+        
+        const results = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+                // --- Smart Extraction Heuristics ---
+                const findMainElement = () => {
+                    const candidates = document.querySelectorAll('article, main, .post, .entry, .article-body, #content');
+                    if (candidates.length > 0) return candidates[0];
+
+                    // Fallback: Find div with most <p> tags
+                    let best = document.body;
+                    let maxP = 0;
+                    document.querySelectorAll('div, section').forEach(el => {
+                        const pCount = el.querySelectorAll('p').length;
+                        if (pCount > maxP) { maxP = pCount; best = el; }
+                    });
+                    return best;
+                };
+
+                const mainEl = findMainElement().cloneNode(true);
+                
+                // Cleanup: remove scripts, styles, navs, footers
+                mainEl.querySelectorAll('script, style, nav, footer, header, ads, .sidebar').forEach(el => el.remove());
+
+                // Resolve Images
+                const images = [];
+                mainEl.querySelectorAll('img').forEach(img => {
+                    const src = img.dataset.original || img.dataset.src || img.getAttribute('src');
+                    if (src) {
+                        const abs = new URL(src, document.baseURI).href;
+                        img.setAttribute('src', abs); // Force absolute for MD match
+                        images.push(abs);
+                    }
+                });
+
+                return {
+                    title: document.title,
+                    html: mainEl.innerHTML,
+                    imageUrls: [...new Set(images)]
+                };
+            }
+        });
+
+        const res = results[0].result;
+        state.title = res.title;
+        state.imageUrls = res.imageUrls;
+        
+        // Convert to Simple Markdown
+        state.markdown = htmlToMarkdown(res.html, state.url);
+
+        // Update UI
+        titleEl.textContent = state.title;
+        imgEl.textContent = `📸 ${state.imageUrls.length} images`;
+        charEl.textContent = `📄 ${state.markdown.length} chars`;
+        
+        clipBtn.disabled = false;
+        status.textContent = 'Ready to save.';
+    } catch (err) {
+        status.textContent = 'Error: ' + err.message;
+    }
+});
+
+// 2. Handle Clipping
 document.getElementById('clip-btn').addEventListener('click', async () => {
     const status = document.getElementById('status');
-    status.textContent = 'Analyzing page structure...';
-  
+    const clipBtn = document.getElementById('clip-btn');
+    clipBtn.disabled = true;
+    
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      
-      // 1. Smart Asset Extraction (Handles Lazy Loading & Background Images)
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const images = [];
-          
-          // 1. Resolve and scan <img> tags (Priority: data-original / data-src > src)
-          document.querySelectorAll('img').forEach(img => {
-              const originalSrc = img.dataset.original || img.dataset.src || img.getAttribute('src');
-              if (originalSrc) {
-                  const absoluteUrl = new URL(originalSrc, document.baseURI).href;
-                  if (absoluteUrl.startsWith('http')) {
-                      // CRITICAL: Point the actual src in the DOM to the absolute URL
-                      // This ensures that when we capture outerHTML, the paths match our download list.
-                      img.setAttribute('src', absoluteUrl);
-                      images.push(absoluteUrl);
-                  }
-              }
-          });
-          
-          // 2. Scan elements with Background Images (Common for map thumbnails / UI)
-          document.querySelectorAll('*').forEach(el => {
-              const bg = window.getComputedStyle(el).backgroundImage;
-              if (bg && bg !== 'none' && bg.startsWith('url')) {
-                  const match = bg.match(/url\(["']?(.*?)["']?\)/);
-                  if (match && match[1]) {
-                      const absoluteUrl = new URL(match[1], document.baseURI).href;
-                      if (absoluteUrl.startsWith('http')) images.push(absoluteUrl);
-                  }
-              }
-          });
-  
-          return {
-            html: document.documentElement.outerHTML, // This now contains absolute URLs for all <img>
-            title: document.title,
-            url: window.location.href,
-            imageUrls: [...new Set(images)] // Dedup
-          };
+        status.textContent = `Downloading ${state.imageUrls.length} assets...`;
+        
+        const assets = [];
+        for (let i = 0; i < state.imageUrls.length; i++) {
+            const url = state.imageUrls[i];
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) continue;
+                const blob = await resp.blob();
+                const b64 = await blobToBase64(blob);
+
+                const rawFilename = url.split('/').pop().split('?')[0] || `img-${i}.jpg`;
+                const filename = rawFilename.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? rawFilename : `${rawFilename}.jpg`;
+                
+                assets.push({ originalUrl: url, filename, base64: b64 });
+                status.textContent = `Assets: ${i+1}/${state.imageUrls.length}...`;
+            } catch (e) {
+                console.warn('[Clipper] Skip:', url);
+            }
         }
-      });
-  
-      const { html, title, url, imageUrls } = results[0].result;
-      const assets = [];
-  
-      // 2. Fetch images in background to bypass CORS/Anti-leech
-      status.textContent = `Capturing ${imageUrls.length} assets...`;
-      
-      for (let i = 0; i < imageUrls.length; i++) {
-          const imgUrl = imageUrls[i];
-          try {
-              const resp = await fetch(imgUrl);
-              if (!resp.ok) continue;
-              const blob = await resp.blob();
-              
-              const reader = new FileReader();
-              const b64 = await new Promise((resolve) => {
-                  reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                  reader.readAsDataURL(blob);
-              });
-  
-              const rawFilename = imgUrl.split('/').pop().split('?')[0] || `asset-${i}.jpg`;
-              const filename = rawFilename.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? rawFilename : `${rawFilename}.jpg`;
-              
-              assets.push({
-                  originalUrl: imgUrl,
-                  filename: filename,
-                  base64: b64
-              });
-              status.textContent = `Progress: ${i+1}/${imageUrls.length}...`;
-          } catch (e) {
-              console.warn('[Clipper] Skip failed asset:', imgUrl);
-          }
-      }
-  
-      // 3. Dispatch to P2P Bridge
-      status.textContent = 'Syncing to P2P App...';
-      const response = await fetch('http://127.0.0.1:44123/api/clip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, url, html, assets })
-      });
-  
-      if (response.ok) {
-        status.textContent = 'Success! Assets Persisted.';
-      } else {
-        const errText = await response.text();
-        status.textContent = 'Sync Error: ' + errText;
-      }
+
+        status.textContent = 'Syncing to P2P Bridge...';
+        const response = await fetch('http://127.0.0.1:44123/api/clip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: state.title,
+                url: state.url,
+                markdown: state.markdown,
+                assets: assets
+            })
+        });
+
+        if (response.ok) {
+            status.textContent = 'Success! Saved to Brain.';
+            setTimeout(() => window.close(), 1500);
+        } else {
+            status.textContent = 'Sync Error: ' + await response.text();
+            clipBtn.disabled = false;
+        }
     } catch (err) {
-      status.textContent = 'Error: ' + err.message;
+        status.textContent = 'Error: ' + err.message;
+        clipBtn.disabled = false;
     }
-  });
+});
+
+// --- Helpers ---
+
+function htmlToMarkdown(html, baseUrl) {
+    let md = html
+        .replace(/<h1.*?>([\s\S]*?)<\/h1>/gi, '# $1\n\n')
+        .replace(/<h2.*?>([\s\S]*?)<\/h2>/gi, '## $1\n\n')
+        .replace(/<strong.*?>([\s\S]*?)<\/strong>/gi, '**$1**')
+        .replace(/<b.*?>([\s\S]*?)<\/b>/gi, '**$1**')
+        .replace(/<p.*?>([\s\S]*?)<\/p>/gi, '$1\n\n')
+        .replace(/<br.*?>/gi, '\n')
+        .replace(/<img.*?src=["'](.*?)["'].*?>/gi, (match, src) => {
+            const filename = src.split('/').pop().split('?')[0] || 'image.jpg';
+            return `\n![${filename}](./assets/${filename})\n`;
+        })
+        .replace(/<a.*?href=["'](.*?)["'].*?>([\s\S]*?)<\/a>/gi, '[$2]($1)')
+        .replace(/<.*?>/g, ''); // Strip remaining tags
+
+    return `---
+Source: ${baseUrl}
+Date: ${new Date().toLocaleString()}
+---
+
+${md.trim()}`;
+}
+
+async function blobToBase64(blob) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.readAsDataURL(blob);
+    });
+}

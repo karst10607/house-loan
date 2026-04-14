@@ -32,7 +32,7 @@ export class P2PStorage {
 
   // ... (keeping other methods same)
 
-  async saveClip(title, url, html, assets = []) {
+  async saveClip(title, url, markdown, assets = []) {
     if (!this.drive) throw new Error('Drive not ready')
     
     // Create a safe slug for the folder
@@ -40,38 +40,25 @@ export class P2PStorage {
     const timestamp = Date.now()
     const folderPath = `/clippings/${timestamp}-${slug}`
 
-    let processedHtml = html
-
-    // 1. Save assets and rewrite HTML paths
+    // 1. Save assets (individual files in Hyperdrive)
     if (assets.length > 0) {
       console.log(`[P2P] Saving ${assets.length} assets for clip: ${title}`)
-      let replacedCount = 0
       for (const asset of assets) {
         const assetPath = `${folderPath}/assets/${asset.filename}`
         const buffer = b4a.from(asset.base64, 'base64')
         await this.drive.put(assetPath, buffer)
-        
-        // Rewrite HTML: Replace original (now absolute) URL with relative local path
-        if (asset.originalUrl) {
-          const newPath = `./assets/${asset.filename}`
-          if (processedHtml.includes(asset.originalUrl)) {
-            processedHtml = processedHtml.split(asset.originalUrl).join(newPath)
-            replacedCount++
-          }
-        }
       }
-      console.log(`[P2P] Finished rewriting ${replacedCount}/${assets.length} asset paths in HTML.`)
     }
 
-    // 2. Save index.html (with rewritten paths)
-    await this.drive.put(`${folderPath}/index.html`, b4a.from(processedHtml, 'utf8'))
+    // 2. Save index.md
+    await this.drive.put(`${folderPath}/index.md`, b4a.from(markdown, 'utf8'))
 
     const doc = {
       id: 'clip-' + timestamp,
       title: '🌐 ' + title,
-      path: `${folderPath}/index.html`,
+      path: `${folderPath}/index.md`,
       type: 'text',
-      mime: 'text/html',
+      mime: 'text/markdown',
       date: new Date().toLocaleDateString(),
       url: url
     }
@@ -82,7 +69,7 @@ export class P2PStorage {
     const nb = this.notebooks.find(n => n.id === 'nb-clippings')
     if (nb) nb.count = this.documents['nb-clippings'].length
 
-    console.log(`[P2P] Web clip saved successfully: ${title}`)
+    console.log(`[P2P] Web clip (MD) saved successfully: ${title}`)
     return doc
   }
 

@@ -1,7 +1,7 @@
 /* Electron Renderer Process */
 
 // ─── App version ─────────────────────────────────────────────
-const APP_VERSION = '1.11.2-electron'
+const APP_VERSION = '1.12.1'
 
 // ─── Base64 helpers ──────────────────────────────────────────
 function bufferToBase64(buffer) {
@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   buildStatusBadge()
 
   await loadState()
+  setupClipperSettingsHandlers()
 
   // Listen to accurate state updates from Main Process instead of polling
   window.api.onStateUpdate((state) => {
@@ -290,25 +291,105 @@ async function handleDeleteFile(doc) {
 // ─── Preview ──────────────────────────────────────────────────
 async function loadAndPreviewDocument(doc) {
   const content = document.getElementById('viewer-content')
-  content.innerHTML = '<div class="empty-viewer">載入中...</div>'
+  content.innerHTML = '<div class="empty-viewer">正在從 P2P 磁碟抓取內容...</div>'
 
   try {
     const base64Str = await window.api.readFile(doc.path, doc.driveKey)
     const u8 = base64ToUint8(base64Str)
-    const blob = new Blob([u8], { type: doc.mime || 'application/pdf' })
-
-    if (currentPdfUrl) URL.revokeObjectURL(currentPdfUrl)
-    currentPdfUrl = URL.createObjectURL(blob)
-
+    
     if (doc.type === 'image') {
+      const blob = new Blob([u8], { type: doc.mime || 'image/jpeg' })
+      if (currentPdfUrl) URL.revokeObjectURL(currentPdfUrl)
+      currentPdfUrl = URL.createObjectURL(blob)
       content.innerHTML = `<img src="${currentPdfUrl}" style="max-width:100%; max-height:100%; object-fit:contain; border-radius:6px;" />`
-    } else {
-      content.innerHTML = `<iframe src="${currentPdfUrl}#toolbar=0" style="width:100%; height:100%; border:none; border-radius:6px;"></iframe>`
+      return
     }
+
+    if (doc.mime === 'application/pdf') {
+      const blob = new Blob([u8], { type: 'application/pdf' })
+      if (currentPdfUrl) URL.revokeObjectURL(currentPdfUrl)
+      currentPdfUrl = URL.createObjectURL(blob)
+      content.innerHTML = `<iframe src="${currentPdfUrl}#toolbar=0" style="width:100%; height:100%; border:none; border-radius:6px;"></iframe>`
+      return
+    }
+
+    // --- HTML / Markdown Handling with Path Rewriting ---
+    let text = new TextDecoder().decode(u8)
+    let html = text
+
+    if (doc.mime === 'text/markdown') {
+      html = simpleMarkdownToHtml(text)
+    }
+
+    // 1. Path Rewriting: Identify ./assets/ and replace with P2P Blobs
+    const assetMatches = [...html.matchAll(/src=["']\.\/assets\/(.*?)["']/g)]
+    const blobMap = new Map()
+
+    if (assetMatches.length > 0) {
+      content.innerHTML = `<div class="empty-viewer">正在快取 ${assetMatches.length} 個 P2P 素材...</div>`
+      
+      const folderPath = doc.path.substring(0, doc.path.lastIndexOf('/'))
+      
+      await Promise.all(assetMatches.map(async (match) => {
+        const filename = match[1]
+        const assetPath = `${folderPath}/assets/${filename}`
+        try {
+          const b64 = await window.api.readFile(assetPath, doc.driveKey)
+          const blob = new Blob([base64ToUint8(b64)])
+          const bUrl = URL.createObjectURL(blob)
+          blobMap.set(`./assets/${filename}`, bUrl)
+        } catch (e) {
+          console.warn('[Preview] Failed to load asset:', assetPath)
+        }
+      }))
+
+      // Replace in HTML
+      blobMap.forEach((bUrl, original) => {
+        html = html.split(original).join(bUrl)
+      })
+    }
+
+    // 2. Final Render in iframe with Style
+    const gfmStyle = `
+      <style>
+        body { font-family: -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; padding: 30px; max-width: 800px; margin: 0 auto; background: #fff; }
+        img { max-width: 100%; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin: 10px 0; }
+        h1, h2, h3 { border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+        a { color: #0366d6; text-decoration: none; }
+        code { background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
+        blockquote { border-left: 4px solid #dfe2e5; color: #6a737d; margin: 0; padding-left: 1em; }
+        hr { height: 0.25em; background-color: #e1e4e8; border: 0; margin: 24px 0; }
+      </style>
+    `
+    const win = document.createElement('iframe')
+    win.style.cssText = 'width:100%; height:100%; border:none; border-radius:6px; background:#fff;'
+    content.innerHTML = ''
+    content.appendChild(win)
+    
+    const docFrame = win.contentDocument || win.contentWindow.document
+    docFrame.open()
+    docFrame.write(gfmStyle + html)
+    docFrame.close()
+
   } catch (err) {
     console.error(err)
     content.innerHTML = `<div class="empty-viewer">預覽失敗：${err.message}</div>`
   }
+}
+
+// --- Simplified GFM Parser ---
+function simpleMarkdownToHtml(md) {
+  return md
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>')
+    .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+    .replace(/\*(.*)\*/gim, '<em>$1</em>')
+    .replace(/!\[(.*?)\]\((.*?)\)/gim, '<img alt="$1" src="$2" />')
+    .replace(/[^\!]\[(.*?)\]\((.*?)\)/gim, '<a href="$2">$1</a>')
+    .replace(/\n$/gim, '<br />')
+    .replace(/\n/gim, '<p></p>')
 }
 
 // ─── Upload ───────────────────────────────────────────────────
@@ -330,4 +411,30 @@ async function handleFileUpload(e) {
 
   await loadState()
   e.target.value = ''
+}
+
+// ─── Clipper Settings ─────────────────────────────────────────
+function setupClipperSettingsHandlers() {
+  const openBtn = document.getElementById('open-folder-btn')
+  const setBtn = document.getElementById('set-folder-btn')
+
+  openBtn?.addEventListener('click', async () => {
+    try {
+      await window.api.openClippingsFolder()
+    } catch (e) {
+      alert('無法開啟資料夾：' + e.message)
+    }
+  })
+
+  setBtn?.addEventListener('click', async () => {
+    try {
+      const currentPath = await window.api.getClipperPath()
+      const newPath = await window.api.selectClipperFolder()
+      if (newPath) {
+        alert(`已成功更新存檔路徑：\n${newPath}`)
+      }
+    } catch (e) {
+      alert('設定失敗：' + e.message)
+    }
+  })
 }
