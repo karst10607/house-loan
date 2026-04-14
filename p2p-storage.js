@@ -45,17 +45,22 @@ export class P2PStorage {
     // 1. Save assets and rewrite HTML paths
     if (assets.length > 0) {
       console.log(`[P2P] Saving ${assets.length} assets for clip: ${title}`)
+      let replacedCount = 0
       for (const asset of assets) {
         const assetPath = `${folderPath}/assets/${asset.filename}`
         const buffer = b4a.from(asset.base64, 'base64')
         await this.drive.put(assetPath, buffer)
         
-        // Rewrite HTML: Replace original URL with relative local path
-        // Simple string replacement is fast and effective here
+        // Rewrite HTML: Replace original (now absolute) URL with relative local path
         if (asset.originalUrl) {
-          processedHtml = processedHtml.split(asset.originalUrl).join(`./assets/${asset.filename}`)
+          const newPath = `./assets/${asset.filename}`
+          if (processedHtml.includes(asset.originalUrl)) {
+            processedHtml = processedHtml.split(asset.originalUrl).join(newPath)
+            replacedCount++
+          }
         }
       }
+      console.log(`[P2P] Finished rewriting ${replacedCount}/${assets.length} asset paths in HTML.`)
     }
 
     // 2. Save index.html (with rewritten paths)

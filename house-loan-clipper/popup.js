@@ -11,18 +11,21 @@ document.getElementById('clip-btn').addEventListener('click', async () => {
         func: () => {
           const images = [];
           
-          // A. Scan <img> tags (Priority: data-original / data-src > src)
+          // 1. Resolve and scan <img> tags (Priority: data-original / data-src > src)
           document.querySelectorAll('img').forEach(img => {
-              // Real Estate sites like 591 use data-original for high-res carousel photos
-              const src = img.dataset.original || img.dataset.src || img.getAttribute('src');
-              if (src) {
-                  // Resolve relative URLs to absolute
-                  const absoluteUrl = new URL(src, document.baseURI).href;
-                  if (absoluteUrl.startsWith('http')) images.push(absoluteUrl);
+              const originalSrc = img.dataset.original || img.dataset.src || img.getAttribute('src');
+              if (originalSrc) {
+                  const absoluteUrl = new URL(originalSrc, document.baseURI).href;
+                  if (absoluteUrl.startsWith('http')) {
+                      // CRITICAL: Point the actual src in the DOM to the absolute URL
+                      // This ensures that when we capture outerHTML, the paths match our download list.
+                      img.setAttribute('src', absoluteUrl);
+                      images.push(absoluteUrl);
+                  }
               }
           });
           
-          // B. Scan elements with Background Images (Common for map thumbnails / UI)
+          // 2. Scan elements with Background Images (Common for map thumbnails / UI)
           document.querySelectorAll('*').forEach(el => {
               const bg = window.getComputedStyle(el).backgroundImage;
               if (bg && bg !== 'none' && bg.startsWith('url')) {
@@ -35,7 +38,7 @@ document.getElementById('clip-btn').addEventListener('click', async () => {
           });
   
           return {
-            html: document.documentElement.outerHTML,
+            html: document.documentElement.outerHTML, // This now contains absolute URLs for all <img>
             title: document.title,
             url: window.location.href,
             imageUrls: [...new Set(images)] // Dedup
