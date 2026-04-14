@@ -30,19 +30,43 @@ export class P2PStorage {
     this.onPeerChange = null
   }
 
-  // ... (keeping other methods same)
+  getDrive() { return this.drive }
+
+  async moveToTrash(path) {
+    if (!this.drive) return
+    const trashPath = `/.trash/${Date.now()}-${path.split('/').pop()}`
+    try {
+      const u8 = await this.drive.get(path)
+      if (u8) {
+        await this.drive.put(trashPath, u8)
+        await this.drive.del(path)
+        console.log(`[P2P] Soft-deleted: ${path} -> ${trashPath}`)
+      }
+    } catch (e) {
+      console.warn(`[P2P] Soft-delete failed for ${path}:`, e.message)
+    }
+  }
 
   async saveClip(title, url, markdown, assets = []) {
     if (!this.drive) throw new Error('Drive not ready')
     
-    // Create a safe slug for the folder
-    const slug = title.replace(/[^\w\s-]/g, '').slice(0, 30).trim().replace(/\s+/g, '-')
-    const timestamp = Date.now()
-    const folderPath = `/clippings/${timestamp}-${slug}`
+    // 1. Generate Hierarchical Path: YYYY/MM/DD-slug
+    const now = new Date()
+    const year = now.getFullYear().toString()
+    const month = (now.getMonth() + 1).toString().padStart(2, '0')
+    const day = now.getDate().toString().padStart(2, '0')
+    const slug = title
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .slice(0, 30)
+    
+    const folderPath = `/clippings/${year}/${month}/${day}-${slug}`
 
-    // 1. Save assets (individual files in Hyperdrive)
+    // 2. Save assets (individual files in Hyperdrive)
     if (assets.length > 0) {
-      console.log(`[P2P] Saving ${assets.length} assets for clip: ${title}`)
+      console.log(`[P2P] Saving ${assets.length} assets in hierachy: ${folderPath}`)
       for (const asset of assets) {
         const assetPath = `${folderPath}/assets/${asset.filename}`
         const buffer = b4a.from(asset.base64, 'base64')
@@ -50,16 +74,16 @@ export class P2PStorage {
       }
     }
 
-    // 2. Save index.md
+    // 3. Save index.md
     await this.drive.put(`${folderPath}/index.md`, b4a.from(markdown, 'utf8'))
 
     const doc = {
-      id: 'clip-' + timestamp,
-      title: '🌐 ' + title,
+      id: 'clip-' + Date.now(),
+      title: '🌐 ' + title, // This will be the human name
       path: `${folderPath}/index.md`,
       type: 'text',
       mime: 'text/markdown',
-      date: new Date().toLocaleDateString(),
+      date: now.toLocaleDateString(),
       url: url
     }
 

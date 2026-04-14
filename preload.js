@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('api', {
   getClipperPath: async () => await ipcRenderer.invoke('get-clipper-path'),
   selectClipperFolder: async () => await ipcRenderer.invoke('select-clipper-folder'),
   openClippingsFolder: async () => await ipcRenderer.invoke('open-clippings-folder'),
+
+  // P2P Sync (Dropbox style)
+  getSyncPath: async () => await ipcRenderer.invoke('get-sync-path'),
+  selectSyncFolder: async () => await ipcRenderer.invoke('select-sync-folder'),
   
   onStateUpdate: (callback) => ipcRenderer.on('state-update', (_event, state) => callback(state))
 })

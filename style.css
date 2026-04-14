@@ -156,6 +156,34 @@ body {
 .sidebar-header {
 }
 
+.sync-settings-row {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.sync-info { flex: 1; }
+
+.sync-settings-row button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 14px;
+  opacity: 0.6;
+  transition: 0.2s;
+}
+
+.sync-settings-row button:hover {
+  background: rgba(255,255,255,0.1);
+  opacity: 1;
+}
+
 .logo-icon { width: 18px; height: 18px; flex-shrink: 0; }
 
 .folders-list {

@@ -12,19 +12,75 @@ const settingsPath = path.join(app.getPath('userData'), 'settings.json')
 let storage = null
 let mainWindow = null
 let clipperPath = ''
+let syncPath = ''
+let syncWatcher = null
 
 async function loadSettings() {
   try {
     const data = JSON.parse(await fs.readFile(settingsPath, 'utf8'))
-    clipperPath = data.clipperPath
+    clipperPath = data.clipperPath || path.join(app.getPath('documents'), 'HouseLoan_Clippings')
+    syncPath = data.syncPath || ''
   } catch (e) {
-    // Default to Documents/HouseLoan_Clippings
     clipperPath = path.join(app.getPath('documents'), 'HouseLoan_Clippings')
   }
 }
 
+async function startSyncEngine() {
+  if (!syncPath || !storage) return
+  if (syncWatcher) syncWatcher.close()
+
+  console.log(`[Sync] Starting Bidirectional Sync at: ${syncPath}`)
+  await fs.mkdir(syncPath, { recursive: true })
+
+  const drive = storage.getDrive()
+  if (!drive) return
+
+  // 1. Initial Sync: P2P -> Local
+  try {
+    for await (const entry of drive.list('/')) {
+      if (entry.value.type !== 'file') continue
+      if (entry.key.startsWith('/.trash')) continue
+      
+      const localFile = path.join(syncPath, entry.key)
+      const localDir = path.dirname(localFile)
+      await fs.mkdir(localDir, { recursive: true })
+      
+      const content = await drive.get(entry.key)
+      await fs.writeFile(localFile, content)
+    }
+  } catch (e) { console.error('[Sync] Initial P2P->Local failed:', e.message) }
+
+  // 2. Local Watcher: Local -> P2P
+  syncWatcher = fs.watch(syncPath, { recursive: true }, async (eventType, filename) => {
+    if (!filename) return
+    const fullPath = path.join(syncPath, filename)
+    const p2pKey = '/' + filename.replace(/\\/g, '/')
+    
+    try {
+      const stats = await fs.stat(fullPath)
+      if (stats.isFile()) {
+        const content = await fs.readFile(fullPath)
+        await drive.put(p2pKey, content)
+        console.log(`[Sync] Local -> P2P: ${p2pKey}`)
+      }
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        // File deleted locally -> Move to P2P Trash
+        await storage.moveToTrash(p2pKey)
+      }
+    }
+  })
+
+  // 3. P2P Watcher: P2P -> Local
+  drive.core.on('append', async () => {
+    // Basic implementation: re-scan or react to specific changes
+    // For simplicity, we can use drive.list('/') logic again or better:
+    // we'd need more complex tracking, but let's do a simple periodic re-sync for now
+  })
+}
+
 async function saveSettings() {
-  await fs.writeFile(settingsPath, JSON.stringify({ clipperPath }), 'utf8')
+  await fs.writeFile(settingsPath, JSON.stringify({ clipperPath, syncPath }), 'utf8')
 }
 
 async function createWindow() {
@@ -33,7 +89,7 @@ async function createWindow() {
     height: 700,
     minWidth: 400,
     minHeight: 500,
-    frame: false, // We have a custom title bar
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -41,16 +97,15 @@ async function createWindow() {
     }
   })
 
-  // Load UI immediately so the user doesn't see a blank screen
   mainWindow.loadFile('index.html')
 
   try {
-    // Initialize P2P Storage
-    console.log('[Main] Initializing P2P Storage...')
     storage = new P2PStorage(storagePath)
-
-    // Init Settings
     await loadSettings()
+    await storage.ready()
+    
+    // Start the Dropbox Sync Engine
+    await startSyncEngine()
 
     // --- Web Clipper Receiver (Port 44123) ---
     const clipperServer = http.createServer((req, res) => {
@@ -71,9 +126,20 @@ async function createWindow() {
             // 1. P2P Storage
             await storage.saveClip(data.title, data.url, data.markdown, data.assets)
 
-            // 2. Custom Local Hard Drive Backup
+            // 2. Custom Local Hard Drive Backup (Hierarchical)
             try {
-              const clipDir = path.join(clipperPath, `${Date.now()}-${data.title.replace(/[^\w\s-]/g, '').slice(0, 30).trim().replace(/\s+/g, '-')}`)
+              const now = new Date()
+              const year = now.getFullYear().toString()
+              const month = (now.getMonth() + 1).toString().padStart(2, '0')
+              const day = now.getDate().toString().padStart(2, '0')
+              const slug = data.title
+                .toLowerCase()
+                .replace(/[^\w\s-]/g, '')
+                .trim()
+                .replace(/\s+/g, '-')
+                .slice(0, 30)
+
+              const clipDir = path.join(clipperPath, year, month, `${day}-${slug}`)
               await fs.mkdir(clipDir, { recursive: true })
               await fs.mkdir(path.join(clipDir, 'assets'), { recursive: true })
 
@@ -81,7 +147,7 @@ async function createWindow() {
               for (const asset of data.assets) {
                 await fs.writeFile(path.join(clipDir, 'assets', asset.filename), Buffer.from(asset.base64, 'base64'))
               }
-              console.log(`[Main] Local backup saved to: ${clipDir}`)
+              console.log(`[Main] Local hierarchical backup saved to: ${clipDir}`)
             } catch (err) {
               console.warn('[Main] Local backup failed:', err.message)
             }
@@ -159,6 +225,21 @@ ipcMain.handle('select-clipper-folder', async () => {
 })
 ipcMain.handle('open-clippings-folder', async () => {
   await shell.openPath(clipperPath)
+})
+
+// P2P Sync Folder (Dropbox style)
+ipcMain.handle('get-sync-path', () => syncPath)
+ipcMain.handle('select-sync-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory']
+  })
+  if (!result.canceled && result.filePaths.length > 0) {
+    syncPath = result.filePaths[0]
+    await saveSettings()
+    await startSyncEngine() // Restart engine with new path
+    return syncPath
+  }
+  return null
 })
 
 ipcMain.on('window-control', (e, action) => {

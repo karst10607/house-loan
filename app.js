@@ -1,7 +1,7 @@
 /* Electron Renderer Process */
 
 // ─── App version ─────────────────────────────────────────────
-const APP_VERSION = '1.12.1'
+const APP_VERSION = '1.14.0'
 
 // ─── Base64 helpers ──────────────────────────────────────────
 function bufferToBase64(buffer) {
@@ -316,9 +316,12 @@ async function loadAndPreviewDocument(doc) {
     // --- HTML / Markdown Handling with Path Rewriting ---
     let text = new TextDecoder().decode(u8)
     let html = text
+    let displayTitle = doc.title
 
     if (doc.mime === 'text/markdown') {
-      html = simpleMarkdownToHtml(text)
+      const { metadata, content: mdBody } = parseFrontmatter(text)
+      if (metadata.title) displayTitle = metadata.title
+      html = simpleMarkdownToHtml(mdBody)
     }
 
     // 1. Path Rewriting: Identify ./assets/ and replace with P2P Blobs
@@ -352,15 +355,18 @@ async function loadAndPreviewDocument(doc) {
     // 2. Final Render in iframe with Style
     const gfmStyle = `
       <style>
-        body { font-family: -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; padding: 30px; max-width: 800px; margin: 0 auto; background: #fff; }
-        img { max-width: 100%; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin: 10px 0; }
-        h1, h2, h3 { border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+        body { font-family: -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; padding: 40px; max-width: 800px; margin: 0 auto; background: #fff; }
+        img { max-width: 100%; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin: 20px 0; display: block; }
+        h1, h2, h3 { border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; margin-top: 24px; }
+        .meta-header { font-size: 13px; color: #666; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 2px solid #f0f0f0; }
         a { color: #0366d6; text-decoration: none; }
         code { background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
-        blockquote { border-left: 4px solid #dfe2e5; color: #6a737d; margin: 0; padding-left: 1em; }
-        hr { height: 0.25em; background-color: #e1e4e8; border: 0; margin: 24px 0; }
+        blockquote { border-left: 4px solid #dfe2e5; color: #6a737d; margin: 0; padding-left: 1em; font-style: italic; }
+        hr { height: 1px; background-color: #e1e4e8; border: 0; margin: 30px 0; }
       </style>
     `
+    const headerHtml = `<div class="meta-header">🌐 原始標題：${displayTitle}<br>📅 擷取日期：${doc.date}</div>`
+    
     const win = document.createElement('iframe')
     win.style.cssText = 'width:100%; height:100%; border:none; border-radius:6px; background:#fff;'
     content.innerHTML = ''
@@ -368,7 +374,7 @@ async function loadAndPreviewDocument(doc) {
     
     const docFrame = win.contentDocument || win.contentWindow.document
     docFrame.open()
-    docFrame.write(gfmStyle + html)
+    docFrame.write(gfmStyle + headerHtml + html)
     docFrame.close()
 
   } catch (err) {
@@ -390,6 +396,30 @@ function simpleMarkdownToHtml(md) {
     .replace(/[^\!]\[(.*?)\]\((.*?)\)/gim, '<a href="$2">$1</a>')
     .replace(/\n$/gim, '<br />')
     .replace(/\n/gim, '<p></p>')
+}
+
+// --- Frontmatter Parser ---
+function parseFrontmatter(md) {
+  const fmMatch = md.match(/^---\n([\s\S]*?)\n---/)
+  const metadata = {}
+  let content = md
+
+  if (fmMatch) {
+    const fmText = fmMatch[1]
+    content = md.replace(fmMatch[0], '').trim()
+    
+    // Simple YAML-like parsing (key: value)
+    fmText.split('\n').forEach(line => {
+      const parts = line.split(':')
+      if (parts.length >= 2) {
+        const key = parts[0].trim()
+        let val = parts.slice(1).join(':').trim()
+        if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1)
+        metadata[key] = val
+      }
+    })
+  }
+  return { metadata, content }
 }
 
 // ─── Upload ───────────────────────────────────────────────────
@@ -435,6 +465,32 @@ function setupClipperSettingsHandlers() {
       }
     } catch (e) {
       alert('設定失敗：' + e.message)
+    }
+  })
+
+  // P2P Sync (Dropbox style)
+  const syncBtn = document.getElementById('set-sync-folder-btn')
+  const syncStatus = document.getElementById('sync-status')
+
+  const updateSyncUI = async () => {
+    const path = await window.api.getSyncPath()
+    if (path) {
+      syncStatus.textContent = `同步中: ...${path.slice(-20)}`
+      syncStatus.title = path
+    }
+  }
+
+  updateSyncUI()
+
+  syncBtn?.addEventListener('click', async () => {
+    try {
+      const newPath = await window.api.selectSyncFolder()
+      if (newPath) {
+        alert(`P2P 同步資料夾已設定：\n${newPath}\n\n現在您可以直接在該資料夾管理檔案！`)
+        updateSyncUI()
+      }
+    } catch (e) {
+      alert('同步設定失敗：' + e.message)
     }
   })
 }

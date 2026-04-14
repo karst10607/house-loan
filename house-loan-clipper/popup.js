@@ -66,8 +66,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         state.title = res.title;
         state.imageUrls = res.imageUrls;
         
-        // Convert to Simple Markdown
-        state.markdown = htmlToMarkdown(res.html, state.url);
+        // Convert to Simple Markdown with Frontmatter
+        state.markdown = htmlToMarkdown(res.html, state.url, state.title);
 
         // Update UI
         titleEl.textContent = state.title;
@@ -136,7 +136,17 @@ document.getElementById('clip-btn').addEventListener('click', async () => {
 
 // --- Helpers ---
 
-function htmlToMarkdown(html, baseUrl) {
+function generateSlug(title) {
+    return title
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, '') // Remove non-word chars except space/hyphen
+        .trim()
+        .replace(/\s+/g, '-')     // Space to hyphen
+        .replace(/-+/g, '-')      // Reduce multiple hyphens
+        .slice(0, 50);            // Limit length
+}
+
+function htmlToMarkdown(html, baseUrl, title) {
     let md = html
         .replace(/<h1.*?>([\s\S]*?)<\/h1>/gi, '# $1\n\n')
         .replace(/<h2.*?>([\s\S]*?)<\/h2>/gi, '## $1\n\n')
@@ -151,12 +161,16 @@ function htmlToMarkdown(html, baseUrl) {
         .replace(/<a.*?href=["'](.*?)["'].*?>([\s\S]*?)<\/a>/gi, '[$2]($1)')
         .replace(/<.*?>/g, ''); // Strip remaining tags
 
-    return `---
-Source: ${baseUrl}
-Date: ${new Date().toLocaleString()}
+    const frontmatter = `---
+title: "${title.replace(/"/g, '\\"')}"
+url: "${baseUrl}"
+date: "${new Date().toISOString()}"
+type: "clipping"
 ---
 
-${md.trim()}`;
+`;
+
+    return frontmatter + md.trim();
 }
 
 async function blobToBase64(blob) {
