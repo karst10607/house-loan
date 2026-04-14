@@ -34,7 +34,7 @@ async function createWindow() {
 
     // --- Web Clipper Receiver (Port 44123) ---
     // Start this BEFORE storage.ready() so it's responsive immediately
-    http.createServer((req, res) => {
+    const clipperServer = http.createServer((req, res) => {
       // Standard CORS + Private Network Access (PNA) headers
       res.setHeader('Access-Control-Allow-Origin', '*')
       res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -68,7 +68,17 @@ async function createWindow() {
       } else {
         res.writeHead(404); res.end()
       }
-    }).listen(44123, '127.0.0.1', () => {
+    })
+
+    clipperServer.on('error', (e) => {
+      if (e.code === 'EADDRINUSE') {
+        console.warn('[Main] Clipper Bridge port (44123) already in use. Skipping server start.')
+      } else {
+        console.error('[Main] Clipper Bridge Server error:', e.message)
+      }
+    })
+
+    clipperServer.listen(44123, '127.0.0.1', () => {
       console.log('[Main] Clipper Bridge listening on http://127.0.0.1:44123')
     })
 
