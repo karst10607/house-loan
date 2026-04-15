@@ -49,7 +49,7 @@ function downloadImage(url, dest, redirects = 5) {
 
 async function startSyncEngine() {
   if (!syncPath || !storage) return
-  if (syncWatcher) syncWatcher.close()
+  if (syncWatcher) { try { syncWatcher.close() } catch(_) {} }
 
   console.log(`[Sync] Starting Bidirectional Sync at: ${syncPath}`)
   await fs.mkdir(syncPath, { recursive: true })
@@ -73,7 +73,7 @@ async function startSyncEngine() {
   } catch (e) { console.error('[Sync] Initial P2P->Local failed:', e.message) }
 
   // 2. Local Watcher: Local -> P2P
-  syncWatcher = fs.watch(syncPath, { recursive: true }, async (eventType, filename) => {
+  syncWatcher = fsSync.watch(syncPath, { recursive: true }, async (eventType, filename) => {
     if (!filename) return
     const fullPath = path.join(syncPath, filename)
     const p2pKey = '/' + filename.replace(/\\/g, '/')
