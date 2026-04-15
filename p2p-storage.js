@@ -15,11 +15,15 @@ export class P2PStorage {
     this.swarm = null
     this.remoteDrives = new Map()
     this.peerCount = 0
+    this._driveKey = null
 
     // Stats
     this.sessionStartTime = Date.now()
     this.persistedSeedTime = 0 // ms
     this.totalUploadedBytes = 0
+    this.totalUploadedBlocks = 0
+    this.uploadSpeed = 0
+    this._uploadSamples = []  // rolling window for speed calc
 
     this.notebooks = [
       { id: 'nb-1', title: '預設資料夾', count: 0 },
@@ -129,13 +133,19 @@ export class P2PStorage {
     this.store.on('core', (core) => {
       core.on('upload', (index, byteLength) => {
         this.totalUploadedBytes += byteLength
+        this.totalUploadedBlocks++
+        this._uploadSamples.push({ ts: Date.now(), bytes: byteLength })
+        // Keep only last 30 seconds for speed calculation
+        const cutoff = Date.now() - 30000
+        this._uploadSamples = this._uploadSamples.filter(s => s.ts > cutoff)
       })
     })
 
     this.swarm.join(this.drive.discoveryKey)
     await this.swarm.flush()
 
-    console.log('[P2P] Local drive key:', b4a.toString(this.drive.key, 'hex'))
+    this._driveKey = b4a.toString(this.drive.key, 'hex')
+    console.log('[P2P] Local drive key:', this._driveKey)
     console.log('[P2P] Path Debug:', { storage: this.storagePath, peers: this.peersPath })
 
     // Load persisted data
@@ -145,7 +155,7 @@ export class P2PStorage {
     // Rebuild document index from Hyperdrive
     await this.rebuildIndex()
 
-    return b4a.toString(this.drive.key, 'hex')
+    return this._driveKey
   }
 
   async rebuildIndex() {
@@ -231,9 +241,25 @@ export class P2PStorage {
 
   async _savePeers() {
     try {
-      const keys = Array.from(this.remoteDrives.keys())
-      await fs.writeFile(this.peersPath, JSON.stringify(keys), 'utf8')
-      console.log(`[P2P] Saved ${keys.length} peers to disk: ${this.peersPath}`)
+      // Save as rich friend objects with metadata (never lose a friend on crash)
+      const friends = Array.from(this.remoteDrives.keys()).map(key => ({
+        key,
+        alias: key.slice(0, 12),
+        addedAt: Date.now()
+      }))
+      // Merge with existing friends file to preserve old entries
+      let existing = []
+      try {
+        existing = JSON.parse(await fs.readFile(this.peersPath, 'utf8'))
+        if (!Array.isArray(existing)) existing = existing.map ? existing : []
+        // Migrate from old string[] format
+        existing = existing.map(e => typeof e === 'string' ? { key: e, alias: e.slice(0,12), addedAt: Date.now() } : e)
+      } catch (_) {}
+      // Merge: keep all unique keys
+      const merged = new Map()
+      for (const f of [...existing, ...friends]) merged.set(f.key, f)
+      await fs.writeFile(this.peersPath, JSON.stringify([...merged.values()], null, 2), 'utf8')
+      console.log(`[P2P] Saved ${merged.size} friends to disk`)
     } catch (e) {
       console.error('[P2P] Failed to save peers:', e.message)
     }
@@ -241,27 +267,38 @@ export class P2PStorage {
 
   async _loadPeers() {
     try {
-      const data = await fs.readFile(this.peersPath, 'utf8')
-      const keys = JSON.parse(data)
-      if (Array.isArray(keys) && keys.length > 0) {
-        console.log(`[P2P] Found ${keys.length} persisted peers. Reconnecting in parallel...`)
+      const raw = await fs.readFile(this.peersPath, 'utf8')
+      let entries = JSON.parse(raw)
+      // Handle old string[] format gracefully
+      if (Array.isArray(entries) && entries.length > 0) {
+        const friends = entries.map(e => typeof e === 'string' ? { key: e, alias: e.slice(0,12), addedAt: 0 } : e)
+        console.log(`[P2P] Found ${friends.length} friends. Reconnecting in background...`)
         
-        // Use parallel loading so one slow peer doesn't block others
-        await Promise.allSettled(keys.map(key => this.connectRemote(key, true)))
-        
-        console.log('[P2P] Parallel reconnection attempt finished.')
+        // Reconnect in parallel, but NEVER remove a friend on failure
+        const results = await Promise.allSettled(friends.map(f => this.connectRemote(f.key, true)))
+        const ok = results.filter(r => r.status === 'fulfilled').length
+        const fail = results.filter(r => r.status === 'rejected').length
+        console.log(`[P2P] Reconnection: ${ok} ok, ${fail} offline (kept in friends list)`)
       }
     } catch (e) {
       if (e.code === 'ENOENT') {
-        console.log('[P2P] No peers.json found (first run or empty)')
+        console.log('[P2P] No friends file found (first run)')
       } else {
         console.error('[P2P] Failed to load peers:', e.message)
       }
     }
   }
 
+  getFriendsList() {
+    return Array.from(this.remoteDrives.keys()).map(key => ({
+      key,
+      alias: key.slice(0, 12),
+      online: true
+    }))
+  }
+
   get key() {
-    return this.drive && this.drive.key ? b4a.toString(this.drive.key, 'hex') : null
+    return this._driveKey || (this.drive && this.drive.key ? b4a.toString(this.drive.key, 'hex') : null)
   }
 
   async connectRemote(hexKey, isLoading = false) {
@@ -439,6 +476,34 @@ export class P2PStorage {
     return b4a.toString(buffer, 'base64')
   }
 
+  getSeedingStats() {
+    // Calculate upload speed from rolling 30s window
+    const cutoff = Date.now() - 30000
+    const recent = this._uploadSamples.filter(s => s.ts > cutoff)
+    const totalRecent = recent.reduce((sum, s) => sum + s.bytes, 0)
+    const windowSec = recent.length > 0 ? (Date.now() - recent[0].ts) / 1000 : 1
+    this.uploadSpeed = windowSec > 0 ? Math.round(totalRecent / windowSec) : 0
+
+    // Drive block stats (how much of our data is available)
+    let totalBlocks = 0
+    let downloadedBlocks = 0
+    try {
+      if (this.drive && this.drive.core) {
+        totalBlocks = this.drive.core.length || 0
+        downloadedBlocks = this.drive.core.contiguousLength || 0
+      }
+    } catch (_) {}
+
+    return {
+      totalUploadedBytes: this.totalUploadedBytes,
+      totalUploadedBlocks: this.totalUploadedBlocks,
+      uploadSpeedBps: this.uploadSpeed,
+      driveBlocks: totalBlocks,
+      driveContiguous: downloadedBlocks,
+      seedingRatio: totalBlocks > 0 ? (this.totalUploadedBlocks / totalBlocks).toFixed(2) : '0.00'
+    }
+  }
+
   getState() {
     const currentSessionTime = Date.now() - this.sessionStartTime
     return {
@@ -446,6 +511,8 @@ export class P2PStorage {
       documents: this.documents,
       key: this.key,
       peerCount: this.peerCount,
+      friends: this.getFriendsList(),
+      seeding: this.getSeedingStats(),
       stats: {
         totalSeedTime: this.persistedSeedTime + currentSessionTime,
         totalUploadedBytes: this.totalUploadedBytes

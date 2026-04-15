@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Listen to accurate state updates from Main Process instead of polling
   window.api.onStateUpdate((state) => {
-    updatePeerBadge(state.peerCount || 0, state.stats)
+    updatePeerBadge(state.peerCount || 0, state.stats, state.seeding)
     
     // Auto-refresh folders and current document list when state changes
     renderFolders(state.notebooks)
@@ -138,7 +138,7 @@ function buildStatusBadge() {
   document.body.appendChild(el)
 }
 
-function updatePeerBadge(count, stats) {
+function updatePeerBadge(count, stats, seeding) {
   const textEl = document.querySelector('#pear-sync-status .status-text')
   const dotEl  = document.querySelector('#pear-sync-status .status-dot')
   const statsEl = document.getElementById('status-stats')
@@ -146,9 +146,20 @@ function updatePeerBadge(count, stats) {
   if (textEl) textEl.textContent = `v${APP_VERSION} · ${count} peer${count !== 1 ? 's' : ''}`
   if (dotEl)  dotEl.style.background = count > 0 ? '#2dd4bf' : '#f87171'
 
-  if (stats && statsEl) {
+  if (statsEl) {
     statsEl.style.display = 'block'
-    statsEl.textContent = `⌛ ${formatTime(stats.totalSeedTime)} · 📤 ${formatBytes(stats.totalUploadedBytes)}`
+    const seedTime = stats ? formatTime(stats.totalSeedTime) : '0m'
+    const uploaded = stats ? formatBytes(stats.totalUploadedBytes) : '0 B'
+    
+    let seedLine = `⌛ ${seedTime} · 📤 ${uploaded}`
+    
+    if (seeding) {
+      const speed = seeding.uploadSpeedBps > 0 ? `${formatBytes(seeding.uploadSpeedBps)}/s` : 'idle'
+      seedLine += `\n🌐 ${speed} · Ratio: ${seeding.seedingRatio}x · ${seeding.driveBlocks} blocks`
+    }
+    
+    statsEl.textContent = seedLine
+    statsEl.style.whiteSpace = 'pre-line'
   }
 }
 
@@ -160,7 +171,7 @@ async function loadState() {
     if (keyInput) {
       keyInput.value = state.key || 'Not Ready'
     }
-    updatePeerBadge(state.peerCount || 0, state.stats)
+    updatePeerBadge(state.peerCount || 0, state.stats, state.seeding)
 
     renderFolders(state.notebooks)
     if (state.notebooks.length > 0) {
