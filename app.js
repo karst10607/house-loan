@@ -1,7 +1,7 @@
 /* Electron Renderer Process */
 
 // ─── App version ─────────────────────────────────────────────
-const APP_VERSION = '1.16.0'
+const APP_VERSION = '1.17.0'
 
 // ─── Base64 helpers ──────────────────────────────────────────
 function bufferToBase64(buffer) {

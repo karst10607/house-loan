@@ -1,9 +1,13 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import path from 'path'
 import http from 'http'
+import https from 'https'
+import httpMod from 'http'
 import fs from 'fs/promises'
+import fsSync from 'fs'
 import { fileURLToPath } from 'url'
 import { P2PStorage } from './p2p-storage.js'
+import { Defuddle } from 'defuddle'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const storagePath = path.join(app.getPath('userData'), 'p2p-storage')
@@ -23,6 +27,24 @@ async function loadSettings() {
   } catch (e) {
     clipperPath = path.join(app.getPath('documents'), 'HouseLoan_Clippings')
   }
+}
+
+// ─── Image Downloader (stream-based, no base64) ──────────────
+function downloadImage(url, dest, redirects = 5) {
+  return new Promise((resolve, reject) => {
+    if (redirects === 0) return reject(new Error('Too many redirects'))
+    const protocol = url.startsWith('https') ? https : httpMod
+    protocol.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return downloadImage(res.headers.location, dest, redirects - 1).then(resolve).catch(reject)
+      }
+      if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`))
+      const file = fsSync.createWriteStream(dest)
+      res.pipe(file)
+      file.on('finish', () => { file.close(); resolve() })
+      file.on('error', reject)
+    }).on('error', reject)
+  })
 }
 
 async function startSyncEngine() {
@@ -147,62 +169,85 @@ async function createWindow() {
         req.on('end', async () => {
           try {
             const data = JSON.parse(body)
-            console.log(`[Bridge] Received: ${data.title} (${body.length} bytes)`)
+            console.log(`[Bridge] Received: "${data.title}" html=${(body.length/1024).toFixed(1)}KB imgs=${(data.imageUrls||[]).length}`)
 
-            // 1. Determine Target Path (Local First)
+            // 1. Convert HTML -> Markdown with defuddle (server-side, high quality)
+            let markdown = ''
+            try {
+              const parsed = Defuddle.parse(data.html, { url: data.url })
+              const frontmatter = [
+                '---',
+                `title: "${(parsed.title || data.title).replace(/"/g, '\\"')}"`,
+                `url: "${data.url}"`,
+                `date: "${new Date().toISOString()}"`,
+                `author: "${parsed.author || ''}"`,
+                `description: "${(parsed.description || '').replace(/"/g, '\\"')}"`,
+                `published: "${parsed.published || ''}"`,
+                `type: clipping`,
+                '---',
+                ''
+              ].join('\n')
+              markdown = frontmatter + (parsed.content || '')
+              console.log(`[Bridge] defuddle OK: ${parsed.wordCount || 0} words`)
+            } catch (defuddleErr) {
+              console.warn('[Bridge] defuddle failed, using raw fallback:', defuddleErr.message)
+              markdown = `---\ntitle: "${data.title}"\nurl: "${data.url}"\ndate: "${new Date().toISOString()}"\ntype: clipping\n---\n\n${data.html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()}`
+            }
+
+            // 2. Determine path & write Markdown to local disk immediately
             const now = new Date()
             const year = now.getFullYear().toString()
             const month = (now.getMonth() + 1).toString().padStart(2, '0')
             const day = now.getDate().toString().padStart(2, '0')
-            
-            let slug = data.title
-              .toLowerCase()
-              .replace(/[<>:"/\\|?*]/g, '')
-              .trim()
-              .replace(/\s+/g, '-')
-              .slice(0, 50)
-            
+            let slug = data.title.toLowerCase().replace(/[<>:"/\\|?*]/g, '').trim().replace(/\s+/g, '-').slice(0, 50)
             if (!slug) slug = 'untitled-' + now.getTime()
 
-            // If syncPath is set, save directly into the Sync Directory (The Dropbox Way)
             const baseDir = syncPath || clipperPath
             const clipDir = path.join(baseDir, year, month, `${day}-${slug}`)
-            
-            // 2. Perform Local HDD Save (High Priority)
-            try {
-              await fs.mkdir(clipDir, { recursive: true })
-              await fs.mkdir(path.join(clipDir, 'assets'), { recursive: true })
-              await fs.writeFile(path.join(clipDir, 'index.md'), data.markdown, 'utf8')
-              for (const asset of data.assets) {
-                await fs.writeFile(path.join(clipDir, 'assets', asset.filename), Buffer.from(asset.base64, 'base64'))
-              }
-              console.log(`[Bridge] Local HDD Save OK: ${clipDir}`)
-            } catch (err) {
-              console.error('[Bridge] Local backup FAILED:', err.message)
-              // We still continue to respond success if P2P might work, or fail if HDD is essential
-            }
+            const assetsDir = path.join(clipDir, 'assets')
 
-            // 3. IMMEDIATE RESPONSE to Extension (End the "Syncing..." hang)
+            await fs.mkdir(clipDir, { recursive: true })
+            await fs.mkdir(assetsDir, { recursive: true })
+            await fs.writeFile(path.join(clipDir, 'index.md'), markdown, 'utf8')
+            console.log(`[Bridge] Local MD saved: ${clipDir}`)
+
+            // 3. RESPOND IMMEDIATELY to Extension — job done from user's perspective
+            const imageUrls = data.imageUrls || []
             res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ success: true }))
-            console.log('[Bridge] Responded SUCCESS to Extension mid-process')
+            res.end(JSON.stringify({ success: true, imageCount: imageUrls.length }))
+            console.log('[Bridge] SUCCESS sent to Extension')
 
-            // 4. Background P2P Sync (Low Priority / Fire-and-Forget)
-            if (storage && storage.getDrive()) {
-              storage.saveClip(data.title, data.url, data.markdown, data.assets)
-                .then(() => {
-                  console.log('[Bridge] Background P2P sync complete')
-                  if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('state-update', storage.getState())
-                  }
-                })
-                .catch(e => console.error('[Bridge] Background P2P sync failed:', e.message))
-            }
+            // 4. Background: Download images with Node.js streams (no base64!)
+            ;(async () => {
+              let downloaded = 0
+              for (const imgUrl of imageUrls) {
+                try {
+                  const rawFilename = imgUrl.split('/').pop().split('?')[0] || `img-${downloaded}.jpg`
+                  const filename = rawFilename.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? rawFilename : rawFilename + '.jpg'
+                  const dest = path.join(assetsDir, filename)
+                  await downloadImage(imgUrl, dest)
+                  downloaded++
+                } catch (e) {
+                  console.warn(`[Bridge] Image skip: ${imgUrl} — ${e.message}`)
+                }
+              }
+              console.log(`[Bridge] Images done: ${downloaded}/${imageUrls.length}`)
+
+              // 5. Background P2P sync after images are ready
+              if (storage && storage.getDrive()) {
+                storage.saveClip(data.title, data.url, markdown, [])
+                  .then(() => {
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                      mainWindow.webContents.send('state-update', storage.getState())
+                    }
+                  })
+                  .catch(e => console.error('[Bridge] P2P sync failed:', e.message))
+              }
+            })()
+
           } catch (err) {
-            console.error('[Bridge] Fatal request error:', err.message)
-            if (!res.writableEnded) {
-              res.writeHead(500); res.end(err.message)
-            }
+            console.error('[Bridge] Fatal error:', err.message)
+            if (!res.writableEnded) { res.writeHead(500); res.end(err.message) }
           }
         })
       } else {
