@@ -42,11 +42,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderDocs(docs)
     }
 
-    // Only update key if it wasn't there
+    // Always keep key in sync (no guard — readonly field, always safe to update)
     const keyInput = document.getElementById('my-key-input')
-    if (keyInput && (!keyInput.value || keyInput.value === 'Not Ready' || keyInput.value === 'Loading...')) {
-      keyInput.value = state.key || 'Not Ready'
-    }
+    if (keyInput) keyInput.value = state.key || 'Not Ready'
 
     // Update friends panel
     if (state.friends) renderFriends(state.friends)
