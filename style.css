@@ -253,6 +253,115 @@ body {
   color: var(--accent-indigo);
 }
 
+/* --- Friends Panel --- */
+.friends-panel {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.friends-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.02);
+  transition: background 0.2s;
+  user-select: none;
+}
+.friends-header:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-primary);
+}
+
+.friends-count {
+  background: var(--accent-indigo);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.friends-chevron {
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+
+.friends-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.friend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-top: 1px solid rgba(255,255,255,0.03);
+}
+.friend-item:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.friend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-online {
+  background: #2dd4bf;
+  box-shadow: 0 0 6px rgba(45,212,191,0.5);
+}
+.dot-offline {
+  background: #6b7280;
+}
+
+.friend-key {
+  flex: 1;
+  font-family: monospace;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-status {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.friend-item.online .friend-status {
+  color: #2dd4bf;
+  background: rgba(45,212,191,0.1);
+}
+.friend-item.offline .friend-status {
+  color: #6b7280;
+  background: rgba(107,114,128,0.1);
+}
+
+.friend-empty {
+  padding: 10px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-hint);
+  line-height: 1.5;
+}
+
 /* ===========================
    Middle Column: Document List
    =========================== */

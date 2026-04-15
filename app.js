@@ -47,8 +47,63 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (keyInput && (!keyInput.value || keyInput.value === 'Not Ready' || keyInput.value === 'Loading...')) {
       keyInput.value = state.key || 'Not Ready'
     }
+
+    // Update friends panel
+    if (state.friends) renderFriends(state.friends)
   })
+
+  setupFriendsPanel()
 })
+
+// ─── Friends Panel ────────────────────────────────────────────
+function setupFriendsPanel() {
+  const toggle = document.getElementById('friends-toggle')
+  const list = document.getElementById('friends-list')
+  const chevron = document.getElementById('friends-chevron')
+  if (!toggle || !list) return
+
+  toggle.addEventListener('click', () => {
+    const isOpen = list.style.display !== 'none'
+    list.style.display = isOpen ? 'none' : 'block'
+    if (chevron) chevron.textContent = isOpen ? '▸' : '▾'
+  })
+}
+
+function renderFriends(friends) {
+  const list = document.getElementById('friends-list')
+  const countEl = document.getElementById('friends-count')
+  if (!list) return
+
+  if (countEl) countEl.textContent = friends.length
+
+  // Only re-render if count changed to avoid flickering
+  if (list.dataset.count === String(friends.length)) return
+  list.dataset.count = String(friends.length)
+
+  list.innerHTML = ''
+  if (friends.length === 0) {
+    list.innerHTML = '<li class="friend-empty">尚無好友<br>在上方輸入 Key 連線</li>'
+    return
+  }
+
+  friends.forEach(f => {
+    const li = document.createElement('li')
+    li.className = `friend-item ${f.online ? 'online' : 'offline'}`
+    li.innerHTML = `
+      <span class="friend-dot ${f.online ? 'dot-online' : 'dot-offline'}"></span>
+      <span class="friend-key" title="${f.key}">${f.alias || f.key.slice(0, 12)}...</span>
+      <span class="friend-status">${f.online ? '同步中' : '離線'}</span>
+    `
+    li.addEventListener('click', () => {
+      navigator.clipboard.writeText(f.key)
+      li.querySelector('.friend-status').textContent = '已複製!'
+      setTimeout(() => {
+        li.querySelector('.friend-status').textContent = f.online ? '同步中' : '離線'
+      }, 1500)
+    })
+    list.appendChild(li)
+  })
+}
 
 // ─── Window controls ─────────────────────────────────────────
 function setupWindowControls() {

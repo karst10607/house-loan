@@ -272,6 +272,7 @@ export class P2PStorage {
       // Handle old string[] format gracefully
       if (Array.isArray(entries) && entries.length > 0) {
         const friends = entries.map(e => typeof e === 'string' ? { key: e, alias: e.slice(0,12), addedAt: 0 } : e)
+        this._persistedFriends = friends  // Cache for offline display
         console.log(`[P2P] Found ${friends.length} friends. Reconnecting in background...`)
         
         // Reconnect in parallel, but NEVER remove a friend on failure
@@ -290,11 +291,23 @@ export class P2PStorage {
   }
 
   getFriendsList() {
-    return Array.from(this.remoteDrives.keys()).map(key => ({
+    // Return all persisted friends with online/offline status
+    const onlineKeys = new Set(this.remoteDrives.keys())
+    // Include online ones
+    const friends = Array.from(this.remoteDrives.keys()).map(key => ({
       key,
       alias: key.slice(0, 12),
       online: true
     }))
+    // Also include any from the _persistedFriends cache that aren't online
+    if (this._persistedFriends) {
+      for (const f of this._persistedFriends) {
+        if (!onlineKeys.has(f.key)) {
+          friends.push({ key: f.key, alias: f.alias || f.key.slice(0, 12), online: false })
+        }
+      }
+    }
+    return friends
   }
 
   get key() {

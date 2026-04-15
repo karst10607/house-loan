@@ -63,7 +63,19 @@
             <input type="text" id="remote-key-input" placeholder="輸入 Key..." style="background: rgba(0,0,0,0.3); border:1px solid var(--border); color: #fff; padding: 4px; border-radius: 4px; flex:1;" />
             <button id="connect-btn" style="background: var(--accent-purple); color:#fff; border:none; border-radius:4px; padding: 0 8px; cursor:pointer;">連線</button>
           </div>
+
+        <!-- Friends Panel (collapsible) -->
+        <div class="friends-panel" id="friends-panel">
+          <div class="friends-header" id="friends-toggle">
+            <span>👥 好友清單</span>
+            <span class="friends-count" id="friends-count">0</span>
+            <span class="friends-chevron" id="friends-chevron">▸</span>
+          </div>
+          <ul class="friends-list" id="friends-list" style="display:none;">
+            <!-- JS fills this -->
+          </ul>
         </div>
+
         <button class="add-btn">+ 新增專案</button>
         
         <div class="sync-settings-row">
