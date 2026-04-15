@@ -217,21 +217,39 @@ async function createWindow() {
             res.end(JSON.stringify({ success: true, imageCount: imageUrls.length }))
             console.log('[Bridge] SUCCESS sent to Extension')
 
-            // 4. Background: Download images with Node.js streams (no base64!)
+            // 4. Background: Download images and rewrite MD with local paths
             ;(async () => {
               let downloaded = 0
+              const urlToLocal = new Map()  // remote URL → local relative path
+              
               for (const imgUrl of imageUrls) {
                 try {
                   const rawFilename = imgUrl.split('/').pop().split('?')[0] || `img-${downloaded}.jpg`
                   const filename = rawFilename.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) ? rawFilename : rawFilename + '.jpg'
                   const dest = path.join(assetsDir, filename)
                   await downloadImage(imgUrl, dest)
+                  urlToLocal.set(imgUrl, `assets/${filename}`)
                   downloaded++
                 } catch (e) {
                   console.warn(`[Bridge] Image skip: ${imgUrl} — ${e.message}`)
                 }
               }
               console.log(`[Bridge] Images done: ${downloaded}/${imageUrls.length}`)
+
+              // 5. Rewrite index.md — replace remote URLs with local asset paths
+              if (urlToLocal.size > 0) {
+                try {
+                  let updatedMd = await fs.readFile(path.join(clipDir, 'index.md'), 'utf8')
+                  for (const [remoteUrl, localPath] of urlToLocal) {
+                    // Replace all occurrences: ![alt](https://...) → ![alt](assets/...)
+                    updatedMd = updatedMd.split(remoteUrl).join(localPath)
+                  }
+                  await fs.writeFile(path.join(clipDir, 'index.md'), updatedMd, 'utf8')
+                  console.log(`[Bridge] MD rewritten with ${urlToLocal.size} local image paths`)
+                } catch (e) {
+                  console.warn('[Bridge] MD rewrite failed:', e.message)
+                }
+              }
 
               // 5. Background P2P sync after images are ready
               if (storage && storage.getDrive()) {
