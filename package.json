@@ -1,6 +1,6 @@
 {
   "name": "house-loan-calculator",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

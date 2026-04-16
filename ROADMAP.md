@@ -1,47 +1,52 @@
-# 去中心化 P2P 知識庫與協作平台 (Roadmap)
+# 房貸助手 (House Loan Helper)：去中心化知識架構 Roadmap
 
-探討將「本機計算與儲存專案」全面升格為「跨平台 P2P 知識協作網絡」，並旨在徹底打破 Notion, Jira, Slack 等 SaaS 平台的 Vendor Lock-in (平台綁架) 限制。
-
----
-
-## 🌟 核心架構願景：雙引擎驅動 (Native Bridge Architecture)
-本專案正式升級為「背景引擎 + 瀏覽器擴充」的雙機體系。這是唯一能同時兼顧「底層硬碟網路權限」與「無縫融入日常工作介面」的終極解法：
-- **核心後端 (Electron Background Agent)**：作為安靜常駐的心臟 (Muscle)，負責維運 `Hyperdrive`（本機實體檔案系統/知識圖床）、`Hyperbee`（鍵值/留言資料庫）與 `Hyperswarm`（無中央伺服器的網路打洞連線）。
-- **前端介面 (Chrome Extension frontend)**：作為使用者的眼睛與觸手，負責將「P2P 討論牆」無縫注入使用者的分頁，並向 Electron 下達讀寫指令。
+本專案旨在打造一個「本地優先 (Local-First)」、「雲端同步 (Notion Mirror)」且具備「P2P 社交屬性 (Pear Distribution)」的現代化知識管理生態。
 
 ---
 
-## 🔑 核心功能目標
+## 🌟 核心架構願景：雙三層共存 (Triple-Layer Architecture)
 
-### 1. 彈性與跨平台自主認證 (Multi-Platform Identity)
-- 完全拋棄傳統自建的帳號密碼註冊機制。
-- **Session 借用機制**：Extension 根據使用者目前活躍的網頁（如 GitHub, Slack, Workspace），自動借用並驗證既有的登入狀態。使用者可以自由選擇用哪種「身分」進行 P2P 留言。
-- 認證結果將轉為數位簽章附著於 P2P 訊息中，確保不需架設中央伺服器，仍可信任留言者的公司或社群身份。
-
-### 2. 訂閱制資訊動態流 (P2P Follow / Subscription Model)
-- 提供如同 Twitter(X) 或 RSS 般的強大去中心化訂閱機制：
-- **動態訂閱 (Follow Users)**：直接追蹤某位同事或專家的 P2P Public Key。Electron 在背景會自動為您拉取該對象最新的動作（於 GitHub 的發布、在 Notion 的新註解等）。
-- **專題訂閱 (Follow Repos/Topics)**：追蹤特定的專案/知識庫，任何人在上面發布的 P2P 變更，皆能即時推送至您的全局時間軸 (Activity Wall)。
-
-### 3. P2P 知識圖床與去中心留言牆 (Decentralized Markdown & Social Wall)
-- **知識圖床 (Hyperdrive)**：所有的 Markdown 筆記、架構截圖，全數保留在本機並透過去中心化網路 `hyper://` 提供即時串流渲染。不假手 AWS。
-- **留言社群化 (Autobase Wall)**：在任意平台的網頁側邊注入留言區塊，發言直接寫入 `Hyperbee`。並利用 `Autobase` 融合訂閱者的日誌，將原本分散在不同工具的討論流完美整合回一條時間軸。
+我們不只做剪貼工具，而是要解決「資料主權」與「協作便利」的矛盾：
+1.  **資料主權層 (Local Core)**：以「葉子束 (Leaf Bundle)」規範存儲的本地 Markdown 與 Assets 檔案。這是唯一的 Single Source of Truth。
+2.  **雲端鏡像層 (Notion Mirror)**：將本地內容異步同步至 Notion，提供強大的 UI、跨裝置瀏覽與團隊協作能力。
+3.  **分散式社交層 (P2P Social)**：利用 Pear (Hyperstack) 將存剪內容轉化為 P2P 訊息流，實現如同 Twitter 般的去中心化追蹤與互動。
 
 ---
 
-## 📍 分階段實作計畫 (Milestones)
+## 📍 發展里程碑 (Milestones)
 
-- [x] **Phase 0：P2P 底層引擎就緒**
-  (已達成) 脫離 Pear 沙盒平台，透過 `v1.9.0` 穩固掛載於標準 Electron 上，並實現 P2P 的穩定狀態同步、打洞傳輸與反應式 UI (Reactive UI) 更新。
+### 🏗️ Phase 1：本地核心與 Notion 自動同步 (當前實作中)
+建立穩固的本地存儲與雲端鏡像通道。
+- [x] **SSH 與 GitHub 自動化環境設定**：解決推播連線問題。
+- [ ] **極簡 Node.js 背景服務**：
+    - 接手 Clipper 傳來的 HTML 資料。
+    - 實作「年/月/日-Slug」Leaf Bundle 自動存檔。
+- [ ] **Notion 異步同步 Worker**：
+    - 自動解析本地 MD 與 Frontmatter。
+    - 支援 Notion File Upload API，直接將本地圖片傳入 Notion。
 
-- [ ] **Phase 1：建構橋接器 (Extension-Electron Bridge)**
-  進入雙機開發階段。撰寫 Chrome Extension 骨架，建立 Extension 與背景 Electron App 之間的通訊通道 (如 Local HTTP server 或 Native Messaging API)，讓擴充可以讀寫 P2P 狀態。
+### 🔗 Phase 2：擴充功能整合與雙向同步
+管理多個入口，統一知識輸入路徑。
+- [ ] **Notion 提取器整合**：整合現有的「Notion 文章提取 Chrome Extension」，讓存儲在 Notion 的內容也能反向同步回本地做備份。
+- [ ] **雙向同步機制**：確保本地修改與 Notion 修改能保持最終一致性。
 
-- [ ] **Phase 2：身分捕獲與 P2P 簡單留言牆 (Identity & Simple Hyperbee)**
-  實作 Extension 讀取 GitHub/Slack 登入身份的邏輯。並在 Electron 端打通 `Hyperbee` 寫入機制，讓使用者能在擴充介面上留下第一筆帶有身份認證的 P2P 留言。
+### 📡 Phase 3：P2P 社交層與分散式分發
+將個人筆記轉化為社交貨幣。
+- [ ] **Pear P2P Feed**：利用 `Hypercore` 建立個人動態流。
+- [ ] **分散式圖床**：利用 `Hyperdrive` 直接將本地 `assets/` 資料夾 P2P 化。
+- [ ] **互動系統**：基於 `Hyperbee` 的去中心化留言、Fav 與轉發功能。
 
-- [ ] **Phase 3：訂閱流與動態渲染 (Subscription & Activity Feeds)**
-  完成 P2P Public Key 的互相追蹤機制 (Follow)。並能在 Extension 介面上動態呈現「訂閱對象」最新推送來的 Markdown 或訊息流，真正擺脫舊版「每次改動都需要重新打包發布 App」的限制。
+### 🧠 Phase 4：智慧化檢索與 Local AI
+讓你的知識庫真正被「讀懂」。
+- [ ] **Local RAG (檢索增強生成)**：引入本地向量資料庫（如 SQLite-vec）。
+- [ ] **P2P 向量同步**：實現在不同節點間同步向量索引，讓 AI 知識庫也能分散式共享。
+- [ ] **AI 知識整理助手**：自動根據剪貼內容生成摘要、標籤與關聯圖譜。
 
-- [ ] **Phase 4：知識總和與全局搜尋 (Causal Merge & Full-Text Search)**
-  利用 `Autobase` 處理極端情況下多人同時留言的網路邏輯時序。並在本地端引入全文搜尋引擎 (`MiniSearch` 等)，能一句話跨海撈取所有已訂閱節點的文字記錄與圖床檔案，消滅資訊孤島。
+---
+
+## 🔑 核心技術選型
+- **Runtime**: Node.js (Background), Chrome Extension (Frontend)
+- **Primary Auth**: Notion API Secrets & SSH Keys
+- **P2P Stack**: Pear, Hypercore, Hyperswarm, Hyperdrive
+- **Conversion**: Turndown (HTML to MD)
+- **Sync**: Dropbox / Qsync (FileSystem Level)
