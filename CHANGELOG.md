@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v1.11.3 (2026-04-14)
+
+### 🛡️ 系統穩定性強化 (Stability Hotfix)
+- **端口衝突防護 (EADDRINUSE FIX)**：修正了當 Clipper Bridge 端口被佔用時會導致 App 報錯崩潰的問題。現在系統會改用警告提示並維持主程式運行。
+- **自動清理邏輯**：強化了重啟時對殘留進程的處理。
+
 ## v1.11.2 (2026-04-14)
 
 ### 🧠 智能擷取升級 (Smart Extraction Upgrade)
