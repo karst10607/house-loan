@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房貸助手 | Knowledge Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0f172a;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-image: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 2rem;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav {
+            display: flex;
+            gap: 2rem;
+        }
+        .nav-card {
+            background: rgba(30, 41, 59, 0.7);
+            padding: 2rem;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-decoration: none;
+            color: white;
+            width: 250px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .nav-card:hover {
+            transform: translateY(-10px);
+            border-color: #38bdf8;
+            box-shadow: 0 10px 30px rgba(56, 189, 248, 0.2);
+        }
+        .nav-card i {
+            font-size: 3rem;
+            display: block;
+            margin-bottom: 1rem;
+        }
+        .nav-card h2 {
+            margin-bottom: 0.5rem;
+        }
+        .nav-card p {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>房貸助手 🏠</h1>
+    <div class="nav">
+        <a href="forum.html" class="nav-card">
+            <h2>🧠 Social Wall</h2>
+            <p>查看您從瀏覽器剪輯的所有知識內容，支援圖片與 Markdown。</p>
+        </a>
+        <div class="nav-card" style="opacity: 0.5; cursor: not-allowed;">
+            <h2>📊 Calculator</h2>
+            <p>(開發中) 正在重新構建全新的房貸試算功能。</p>
+        </div>
+    </div>
+</body>
+</html>

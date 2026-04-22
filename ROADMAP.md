@@ -18,12 +18,15 @@
 ### 🏗️ Phase 1：本地核心與 Notion 自動同步 (當前實作中)
 建立穩固的本地存儲與雲端鏡像通道。
 - [x] **SSH 與 GitHub 自動化環境設定**：解決推播連線問題。
-- [ ] **極簡 Node.js 背景服務**：
+- [x] **基於 RxDB 的 Knowledge Hub 背景服務**：
     - 接手 Clipper 傳來的 HTML 資料。
     - 實作「年/月/日-Slug」Leaf Bundle 自動存檔。
-- [ ] **Notion 異步同步 Worker**：
-    - 自動解析本地 MD 與 Frontmatter。
-    - 支援 Notion File Upload API，直接將本地圖片傳入 Notion。
+    - 內建 RxDB 索引，支援快速檢索與 Persistence。
+    - 提供 `/api/clips` 介面供前端論壇調用。
+- [x] **Social Wall (初版論壇介面)**：
+    - 建立 `forum.html` 展示所有擷取的內容。
+    - 支援自動下載圖片並在論壇中顯示。
+    - 採用現代化玻璃擬態 (Glassmorphism) 設計。
 
 ### 🔗 Phase 2：擴充功能整合與雙向同步
 管理多個入口，統一知識輸入路徑。

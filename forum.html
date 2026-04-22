@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知識牆 — Knowledge Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --card: #1e2130;
+            --border: rgba(255,255,255,0.07);
+            --accent: #4f8ef7;
+            --teal: #2dd4bf;
+            --red: #e94560;
+            --text: #e4e6f0;
+            --muted: #6b7280;
+            --tag-bg: rgba(79,142,247,0.12);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ---- TOP BAR ---- */
+        .topbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 200;
+        }
+        .topbar-logo {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--teal);
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .topbar-logo span { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 6px; }
+        .topbar-search {
+            flex: 1;
+            max-width: 400px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 14px;
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+        }
+        .topbar-search:focus { border-color: var(--accent); }
+        .topbar-search::placeholder { color: var(--muted); }
+        .topbar-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+        .topbar-count {
+            font-size: 12px;
+            color: var(--muted);
+            background: rgba(255,255,255,0.05);
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        /* ---- LAYOUT ---- */
+        .layout {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px 16px;
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 20px;
+        }
+
+        /* ---- THREAD LIST (left panel) ---- */
+        .thread-list { display: flex; flex-direction: column; gap: 0; }
+
+        .thread-list-header {
+            display: grid;
+            grid-template-columns: 1fr 100px 90px;
+            padding: 8px 16px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 4px;
+        }
+
+        .thread-row {
+            display: grid;
+            grid-template-columns: 1fr 100px 90px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.15s;
+            align-items: center;
+            gap: 8px;
+        }
+        .thread-row:hover { background: rgba(255,255,255,0.04); }
+        .thread-row.active { background: rgba(79,142,247,0.08); border-left: 3px solid var(--accent); }
+
+        .thread-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .thread-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .thread-row:hover .thread-title { color: var(--accent); }
+        .thread-row.active .thread-title { color: var(--accent); }
+
+        .thread-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .thread-tag {
+            font-size: 10px;
+            background: var(--tag-bg);
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        .thread-source {
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+        .thread-date {
+            font-size: 12px;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+        .thread-thumb {
+            width: 64px;
+            height: 44px;
+            object-fit: cover;
+            border-radius: 6px;
+            background: var(--card);
+            flex-shrink: 0;
+        }
+        .thumb-cell { display: flex; justify-content: center; }
+
+        .thread-actions { display: flex; justify-content: flex-end; }
+        .delete-row-btn {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 15px;
+            padding: 4px 6px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .delete-row-btn:hover { color: var(--red); background: rgba(233,69,96,0.1); }
+
+        /* ---- SIDEBAR (right) ---- */
+        .sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+        .sidebar-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .sidebar-card h4 {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 12px;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+        .stat-row:last-child { border: none; }
+        .stat-label { color: var(--muted); }
+        .stat-value { font-weight: 600; color: var(--text); }
+
+        .recent-item {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+        .recent-item:last-child { border: none; }
+        .recent-title {
+            color: var(--text);
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .recent-title:hover { color: var(--accent); }
+        .recent-date { color: var(--muted); margin-top: 2px; }
+
+        /* ---- READER MODAL ---- */
+        #reader-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+            overflow-y: auto;
+            padding: 30px 16px;
+        }
+        .reader-wrap {
+            max-width: 780px;
+            margin: 0 auto;
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        .reader-header {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 20px 28px;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .reader-header-info { flex: 1; min-width: 0; }
+        .reader-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+        .reader-meta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .reader-date { font-size: 12px; color: var(--muted); }
+        .reader-source-link {
+            font-size: 12px;
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .reader-source-link:hover { text-decoration: underline; }
+
+        .reader-close {
+            background: rgba(255,255,255,0.08);
+            border: none;
+            color: var(--muted);
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .reader-close:hover { color: var(--text); background: rgba(255,255,255,0.15); }
+
+        .reader-body {
+            padding: 28px;
+            line-height: 1.75;
+            font-size: 15px;
+            color: var(--text);
+        }
+        .reader-body img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin: 16px 0;
+            display: block;
+        }
+        .reader-body h1, .reader-body h2, .reader-body h3 {
+            font-family: 'Outfit', sans-serif;
+            margin: 24px 0 10px;
+            color: var(--text);
+        }
+        .reader-body h2 { font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+        .reader-body h3 { font-size: 16px; }
+        .reader-body p { margin-bottom: 14px; }
+        .reader-body a { color: var(--accent); }
+        .reader-body blockquote {
+            border-left: 3px solid var(--teal);
+            margin: 16px 0;
+            padding: 8px 16px;
+            background: rgba(45,212,191,0.05);
+            color: var(--muted);
+            font-style: italic;
+            border-radius: 0 6px 6px 0;
+        }
+        .reader-body code {
+            background: rgba(255,255,255,0.08);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .reader-body pre {
+            background: #111;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+        .reader-body table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin: 16px 0;
+        }
+        .reader-body th, .reader-body td {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+        .reader-body th { background: rgba(255,255,255,0.05); font-weight: 600; }
+
+        /* ---- EMPTY & LOADING ---- */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--muted);
+        }
+        .empty-state h3 { font-size: 18px; margin-bottom: 8px; color: var(--text); }
+
+        @keyframes shimmer {
+            0% { background-position: -800px 0; }
+            100% { background-position: 800px 0; }
+        }
+        .shimmer-row {
+            height: 68px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(90deg, var(--card) 25%, rgba(255,255,255,0.04) 50%, var(--card) 75%);
+            background-size: 800px 100%;
+            animation: shimmer 1.8s infinite;
+        }
+
+        @media (max-width: 768px) {
+            .layout { grid-template-columns: 1fr; }
+            .sidebar { display: none; }
+            .thread-list-header { display: none; }
+            .thread-row { grid-template-columns: 1fr 36px; }
+            .thread-date { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<nav class="topbar">
+    <a class="topbar-logo" href="index.html">🧠 Knowledge Hub <span>知識牆</span></a>
+    <input class="topbar-search" type="text" id="search-input" placeholder="搜尋標題...">
+    <div class="topbar-right">
+        <span class="topbar-count" id="total-count">載入中...</span>
+    </div>
+</nav>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+    <!-- LEFT: Thread List -->
+    <main>
+        <div class="thread-list-header">
+            <span>文章標題</span>
+            <span>來源圖</span>
+            <span>儲存時間</span>
+        </div>
+        <div class="thread-list" id="thread-list">
+            <!-- Shimmer placeholders -->
+            <div class="shimmer-row"></div>
+            <div class="shimmer-row"></div>
+            <div class="shimmer-row"></div>
+            <div class="shimmer-row"></div>
+            <div class="shimmer-row"></div>
+        </div>
+    </main>
+
+    <!-- RIGHT: Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-card">
+            <h4>📊 統計</h4>
+            <div class="stat-row">
+                <span class="stat-label">文章總數</span>
+                <span class="stat-value" id="stat-total">—</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">本月新增</span>
+                <span class="stat-value" id="stat-month">—</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">今日新增</span>
+                <span class="stat-value" id="stat-today">—</span>
+            </div>
+        </div>
+
+        <div class="sidebar-card">
+            <h4>🕐 最近收藏</h4>
+            <div id="recent-list">載入中...</div>
+        </div>
+    </aside>
+</div>
+
+<!-- READER MODAL -->
+<div id="reader-modal">
+    <div class="reader-wrap">
+        <div class="reader-header">
+            <div class="reader-header-info">
+                <div class="reader-title" id="reader-title"></div>
+                <div class="reader-meta">
+                    <span class="reader-date" id="reader-date"></span>
+                    <a class="reader-source-link" id="reader-source" href="#" target="_blank">↗ 原始連結</a>
+                </div>
+            </div>
+            <button class="reader-close" onclick="closeReader()">✕</button>
+        </div>
+        <div class="reader-body" id="reader-body"></div>
+    </div>
+</div>
+
+<script>
+    let allClips = [];
+    let filtered = [];
+    let activeId = null;
+
+    // ---- Helpers ----
+    function formatDate(iso) {
+        const d = new Date(iso);
+        const now = new Date();
+        const diff = now - d;
+        if (diff < 60000) return '剛剛';
+        if (diff < 3600000) return `${Math.floor(diff / 60000)} 分鐘前`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小時前`;
+        return d.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric' });
+    }
+
+    function getDomain(url) {
+        try { return new URL(url).hostname.replace('www.', ''); } catch { return '—'; }
+    }
+
+    // ---- Fetch clips ----
+    async function fetchClips() {
+        try {
+            const res = await fetch('/api/clips');
+            allClips = await res.json();
+            filtered = [...allClips];
+            render();
+            renderSidebar();
+        } catch (err) {
+            document.getElementById('thread-list').innerHTML = 
+                '<div class="empty-state"><h3>⚠️ 無法連接後端</h3><p>請確認 npm start 已執行</p></div>';
+        }
+    }
+
+    // ---- Render thread list ----
+    function render() {
+        const list = document.getElementById('thread-list');
+        document.getElementById('total-count').textContent = `${filtered.length} 篇文章`;
+
+        if (filtered.length === 0) {
+            list.innerHTML = '<div class="empty-state"><h3>📭 尚無收藏</h3><p>使用 Chrome 擴充功能開始剪輯文章</p></div>';
+            return;
+        }
+
+        list.innerHTML = filtered.map((clip, i) => {
+            const imgPath = `/Clips/${clip.localPath}/assets/img_0.jpg`;
+            const isActive = clip.id === activeId;
+            return `
+            <div class="thread-row ${isActive ? 'active' : ''}" id="row-${clip.id}" onclick="openReader('${clip.id}')">
+                <div class="thread-main">
+                    <div class="thread-title">${escHtml(clip.title)}</div>
+                    <div class="thread-meta">
+                        <span class="thread-tag">收藏</span>
+                        <span class="thread-source">${getDomain(clip.url)}</span>
+                    </div>
+                </div>
+                <div class="thumb-cell">
+                    <img src="${imgPath}" class="thread-thumb" 
+                        onerror="this.style.display='none'">
+                </div>
+                <div class="thread-date">${formatDate(clip.createdAt)}</div>
+            </div>`;
+        }).join('');
+    }
+
+    function escHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ---- Sidebar ----
+    function renderSidebar() {
+        const total = allClips.length;
+        const now = new Date();
+        const month = allClips.filter(c => {
+            const d = new Date(c.createdAt);
+            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        }).length;
+        const today = allClips.filter(c => {
+            const d = new Date(c.createdAt);
+            return d.toDateString() === now.toDateString();
+        }).length;
+
+        document.getElementById('stat-total').textContent = total;
+        document.getElementById('stat-month').textContent = month;
+        document.getElementById('stat-today').textContent = today;
+
+        const recent = allClips.slice(0, 6);
+        document.getElementById('recent-list').innerHTML = recent.length ? recent.map(c => `
+            <div class="recent-item">
+                <div class="recent-title" onclick="openReader('${c.id}')">${escHtml(c.title)}</div>
+                <div class="recent-date">${formatDate(c.createdAt)}</div>
+            </div>
+        `).join('') : '<div style="color:var(--muted);font-size:12px">尚無文章</div>';
+    }
+
+    // ---- Open Reader ----
+    async function openReader(id) {
+        activeId = id;
+        // Highlight active row
+        document.querySelectorAll('.thread-row').forEach(r => r.classList.remove('active'));
+        const row = document.getElementById('row-' + id);
+        if (row) row.classList.add('active');
+
+        const clip = allClips.find(c => c.id === id);
+        if (!clip) return;
+
+        const modal = document.getElementById('reader-modal');
+        const body = document.getElementById('reader-body');
+        
+        document.getElementById('reader-title').textContent = clip.title;
+        document.getElementById('reader-date').textContent = new Date(clip.createdAt).toLocaleString('zh-TW');
+        document.getElementById('reader-source').href = clip.url;
+        body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">載入中...</div>';
+        modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+
+        let md = clip.content;
+        if (!md) {
+            try {
+                const res = await fetch(`/Clips/${clip.localPath}/index.md`);
+                if (res.ok) {
+                    const raw = await res.text();
+                    md = raw.replace(/^---[\s\S]*?---/, '').trim();
+                }
+            } catch (e) {}
+        }
+        md = md || '*(此文章無可用內容)*';
+        // Fix image paths
+        md = md.replace(/\.\/assets\//g, `/Clips/${clip.localPath}/assets/`);
+        body.innerHTML = marked.parse(md);
+    }
+
+    function closeReader() {
+        document.getElementById('reader-modal').style.display = 'none';
+        document.body.style.overflow = 'auto';
+        activeId = null;
+        document.querySelectorAll('.thread-row').forEach(r => r.classList.remove('active'));
+    }
+
+    // ---- Search ----
+    document.getElementById('search-input').addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase();
+        filtered = q 
+            ? allClips.filter(c => c.title.toLowerCase().includes(q) || (c.url || '').toLowerCase().includes(q))
+            : [...allClips];
+        render();
+    });
+
+    // ---- Keyboard close ----
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') closeReader(); });
+
+    // ---- Click backdrop to close ----
+    document.getElementById('reader-modal').addEventListener('click', e => {
+        if (e.target === document.getElementById('reader-modal')) closeReader();
+    });
+
+    // ---- Init ----
+    document.addEventListener('DOMContentLoaded', fetchClips);
+</script>
+</body>
+</html>

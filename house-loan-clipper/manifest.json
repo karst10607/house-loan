@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "House Loan P2P Clipper",
-  "version": "1.17.1",
-  "description": "Capture web pages and sync them to your local P2P Knowledge Base.",
+  "name": "Knowledge Hub Clipper",
+  "version": "2.0.0",
+  "description": "Visually select and clip clean content to your local Knowledge Hub.",
   "permissions": ["activeTab", "scripting"],
   "host_permissions": [
     "http://127.0.0.1:44123/*",

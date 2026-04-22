@@ -1,76 +1,143 @@
-# 房貸計算器 🏠
+# 房貸助手 + 知識剪輯系統 🏠🧠
 
-一個輕量、跨平台的房貸計算器，支援 **本息均攤** 與 **本金均攤** 兩種還款方式，並附完整攤還明細表。
+一個整合**房貸計算器**與**本地 Knowledge Hub** 的工具，支援網頁剪輯、視覺化框選、Markdown 存檔，以及 Social Wall 論壇閱讀介面。
 
-同時支援 **GitHub Pages 網頁版** 與 **🍐 Pear P2P 桌面版**。
+---
 
-[![Deploy to GitHub Pages](https://github.com/YOUR_USERNAME/House_Loan/actions/workflows/deploy.yml/badge.svg)](https://github.com/YOUR_USERNAME/House_Loan/actions/workflows/deploy.yml)
+## ✨ 功能總覽
 
-## ✨ 功能
+- 🔢 房貸試算：本息均攤 / 本金均攤，含逐月明細
+- 🧠 本地 Knowledge Hub：接收 Chrome Clipper 資料，存入本地 Markdown
+- 🎯 視覺框選 Clipper：可在頁面上點選想要的區塊，只儲存乾淨內文
+- 📰 Social Wall 論壇介面：Mobile01 風格，可搜尋、點擊閱讀 Markdown 全文
+- 🌐 GitHub Pages 靜態部署支援
 
-- 🔢 輸入貸款金額、年利率、年限
-- 📊 顯示月付金額、總利息、總還款金額
-- 📈 本金 vs 利息比例視覺化
-- 📋 完整逐月攤還明細表
-- 📱 響應式設計，手機、平板、電腦皆可使用
-- 🌐 純靜態網頁，可部署至 GitHub Pages
-- 🍐 支援 Pear P2P Runtime，去中心化分享
+---
 
-## 🚀 部署到 GitHub Pages
+## 💾 資料儲存路徑
 
-### 方法一：GitHub Actions（建議）
+所有剪輯下來的內容都儲存在本機硬碟上，路徑如下：
 
-1. 將此專案 push 到 GitHub repository
-2. 進入 repository → **Settings** → **Pages**
-3. 將 **Source** 設為 **GitHub Actions**
-4. 任何推送到 `main` 分支都會自動部署
-
-### 方法二：手動部署
-
-1. 進入 repository → **Settings** → **Pages**
-2. 將 **Source** 設為 **Deploy from a branch**
-3. 選擇 `main` 分支，目錄選 `/ (root)`
-4. 儲存後等待幾分鐘即可
-
-## 🍐 Pear P2P 模式
-
-此專案同時支援 [Pear Runtime](https://docs.pears.com)，讓你可以透過 P2P 網路分享應用，不需要任何伺服器。
-
-### 安裝 Pear Runtime
-
-```bash
-npx pear
+```
+/home/koto/公共/House_Loan/Clips/
+└── YYYY/                        ← 年份
+    └── MM/                      ← 月份
+        └── DD-slug/             ← 日期 + 文章 Slug（自動產生）
+            ├── index.md         ← 文章主文（Markdown + YAML Frontmatter）
+            └── assets/          ← 下載的圖片
+                ├── img_0.jpg
+                ├── img_1.png
+                └── ...
 ```
 
-依照指示設定 `PATH` 環境變數。
-
-### 開發模式（本地執行）
-
-```bash
-pear run .
+**範例路徑：**
+```
+/home/koto/公共/House_Loan/Clips/2026/04/20-my-article/
+├── index.md
+└── assets/
+    └── img_0.jpg
 ```
 
-### 發佈到 P2P 網路
+> RxDB 索引資料（記錄標題、連結、建立時間）會另外儲存在：
+> `/home/koto/公共/House_Loan/rxdb_data.json`
+
+---
+
+## 🚀 啟動方式
+
+### 安裝依賴
 
 ```bash
-# 暫存應用
-pear stage .
-
-# 發佈，取得 pear:// 連結
-pear release .
+cd /home/koto/公共/House_Loan
+npm install
 ```
 
-分享取得的 `pear://` 連結，其他安裝了 Pear 的使用者可以直接執行：
+### 啟動 Knowledge Hub 後端
 
 ```bash
-pear run pear://<your-key>
+npm start
 ```
 
-## 🧮 計算公式
+伺服器啟動於 `http://127.0.0.1:44123`
+
+| 路徑 | 說明 |
+|------|------|
+| `http://127.0.0.1:44123/` | 首頁入口 |
+| `http://127.0.0.1:44123/forum.html` | Social Wall 論壇介面 |
+| `POST /api/clip` | Clipper 傳送資料的 API |
+| `GET /api/clips` | 取得所有剪輯清單（JSON）|
+| `DELETE /api/clips/:id` | 刪除指定剪輯（同步刪除硬碟檔案）|
+
+---
+
+## 🎯 Chrome Clipper 使用方式
+
+Clipper 擴充功能位於 `house-loan-clipper/` 目錄。
+
+### 安裝步驟
+
+1. 開啟 Chrome → 網址列輸入 `chrome://extensions/`
+2. 開啟右上角「開發人員模式」
+3. 點「載入未封裝項目」→ 選擇 `/home/koto/公共/House_Loan/house-loan-clipper/`
+
+### 兩種剪輯模式
+
+| 模式 | 說明 |
+|------|------|
+| **🎯 選取區塊** | 點擊啟動後，在頁面上滑鼠點擊想要的區塊（紅框 hover，藍框選取），可多選，再點「✅ 確認並剪輯」 |
+| **📄 整頁自動提取** | 自動尋找頁面的 `<article>` / `<main>` 等主要內容區塊，過濾掉 JS/CSS/廣告，一鍵儲存 |
+
+兩種模式都會：
+- 過濾掉 `<script>/<style>/base64/SVG` 等雜訊
+- 自動下載圖片到 `assets/` 資料夾
+- 把 HTML 轉成乾淨的 Markdown 存檔
+
+---
+
+## 📰 Social Wall 論壇介面
+
+開啟 `http://127.0.0.1:44123/forum.html`：
+
+- **左欄**：所有文章清單（類 Mobile01 Thread List），含縮圖、來源網域、相對時間
+- **右側欄**：文章統計（總數 / 本月 / 今日）+ 最近收藏
+- **搜尋欄**：即時過濾標題
+- **閱讀器**：點擊文章後在同頁彈出 Modal，完整渲染 Markdown 全文 + 本地圖片
+
+---
+
+## 📁 完整檔案結構
+
+```
+House_Loan/
+├── main.js                    # Knowledge Hub 後端 (Express + RxDB)
+├── index.html                 # 首頁入口
+├── forum.html                 # Social Wall 論壇介面（Mobile01 風格）
+├── package.json
+├── rxdb_data.json             # RxDB 自動產生的持久化索引（可刪除重建）
+├── README.md
+├── ROADMAP.md
+│
+├── Clips/                     # 📁 所有剪輯內容儲存於此
+│   └── YYYY/MM/DD-slug/
+│       ├── index.md           # 文章主文
+│       └── assets/            # 下載的圖片
+│
+├── house-loan-clipper/        # Chrome 擴充功能
+│   ├── manifest.json
+│   ├── popup.html             # 擴充功能彈窗
+│   ├── popup.js               # 彈窗邏輯（選取 + 傳送）
+│   └── content-script.js     # 注入到頁面的視覺框選 UI
+│
+└── .github/
+    └── workflows/
+        └── deploy.yml         # GitHub Pages 自動部署
+```
+
+---
+
+## 🧮 房貸計算公式
 
 ### 本息均攤（等額還款）
-
-每月還款金額固定：
 
 ```
 月付金額 = P × r / (1 - (1 + r)^(-n))
@@ -82,29 +149,14 @@ n = 還款月數（年限 × 12）
 
 ### 本金均攤（等本還款）
 
-每月還款本金固定，利息逐月遞減：
-
 ```
 月還本金 = P / n
 月付利息 = 剩餘本金 × r
 月付金額 = 月還本金 + 月付利息
 ```
 
-## 📁 檔案結構
-
-```
-House_Loan/
-├── index.html          # 主頁面（Pear + Web 共用）
-├── style.css           # 樣式
-├── calculator.js       # 計算邏輯
-├── package.json        # Pear Runtime 配置
-├── README.md
-└── .github/
-    └── workflows/
-        └── deploy.yml  # GitHub Pages 自動部署
-```
+---
 
 ## ⚠️ 免責聲明
 
 本計算器結果僅供參考，實際貸款條件（利率、手續費等）請以銀行公告為準。
-
