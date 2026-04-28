@@ -270,6 +270,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handleEnforceLimit(msg).then((r) => sendResponse(r));
     return true;
   }
+
+  // ── Clipper: inject selector + start background polling ──
+  if (msg.action === "startClipper") {
+    const { tabId, tabUrl, tabTitle, folderName } = msg;
+    chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['src/features/clipper/selector.js']
+    }).then(() => {
+      startClipperPolling(tabId, tabUrl, tabTitle, folderName);
+      sendResponse({ ok: true });
+    }).catch(e => {
+      sendResponse({ ok: false, error: e.message });
+    });
+    return true;
+  }
 });
 
 // ── Direct API fetch from service worker ────────────────────────────
@@ -472,3 +487,85 @@ async function refreshViaContentScript(pageIds) {
     });
   });
 }
+
+// ── Clipper Logic (runs in service worker, survives popup close) ─────
+
+let clipperPollingTimer = null;
+let clipperTabId = null;
+
+function startClipperPolling(tabId, tabUrl, tabTitle, folderName) {
+  clipperTabId = tabId;
+  if (clipperPollingTimer) clearInterval(clipperPollingTimer);
+
+  clipperPollingTimer = setInterval(async () => {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => window.__khGetResult ? window.__khGetResult() : null
+      });
+
+      const result = results[0]?.result;
+      if (!result) return; // Still selecting
+
+      clearInterval(clipperPollingTimer);
+      clipperPollingTimer = null;
+
+      if (result.cancelled) {
+        console.log("[Clipper] Selection cancelled by user");
+        return;
+      }
+
+      // Clear result on page
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => { window.__khSelectionResult = null; }
+      });
+
+      // Build payload and POST to Bridge
+      const payload = {
+        url: tabUrl,
+        title: folderName || tabTitle,
+        html: result.html,
+        images: (result.imageUrls || []).map(u => ({ url: u }))
+      };
+
+      console.log("[Clipper] Sending to Bridge:", payload.title, "images:", payload.images.length);
+
+      const saveRes = await fetch(`${BRIDGE_URL}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (saveRes.ok) {
+        const saveJson = await saveRes.json();
+        console.log("[Clipper] ✅ Saved:", saveJson);
+        // Notify popup if it's still open
+        chrome.runtime.sendMessage({
+          action: "clipperResult",
+          success: true,
+          folder: saveJson.folder,
+          file: saveJson.file || "index.md"
+        }).catch(() => {}); // Popup may be closed, that's fine
+      } else {
+        const errText = await saveRes.text();
+        console.error("[Clipper] Bridge save failed:", saveRes.status, errText);
+        chrome.runtime.sendMessage({
+          action: "clipperResult",
+          success: false,
+          error: `Bridge responded with ${saveRes.status}`
+        }).catch(() => {});
+      }
+
+    } catch (e) {
+      // Tab might be closed or navigated away
+      if (e.message?.includes("No tab") || e.message?.includes("cannot access")) {
+        clearInterval(clipperPollingTimer);
+        clipperPollingTimer = null;
+        console.warn("[Clipper] Tab closed or inaccessible, stopping poll");
+      }
+      // Other errors: keep polling (might be transient)
+    }
+  }, 1000);
+}
+

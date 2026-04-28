@@ -194,9 +194,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
-// ── Clipper Logic ──
-
-let pollingInterval = null;
+// ── Clipper Logic (delegated to background service worker) ──
 
 document.getElementById('start-clipper').addEventListener('click', async () => {
   const statusEl = document.getElementById('clipper-status');
@@ -204,68 +202,37 @@ document.getElementById('start-clipper').addEventListener('click', async () => {
   
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    // Inject the selector script
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['src/features/clipper/selector.js']
-    });
+    const folderInput = document.getElementById('clipper-folder').value.trim();
 
-    // Start polling for result
-    if (pollingInterval) clearInterval(pollingInterval);
-    
-    pollingInterval = setInterval(async () => {
-      try {
-        const [{ result }] = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: () => window.__khGetResult && window.__khGetResult()
-        });
-
-        if (result) {
-          clearInterval(pollingInterval);
-          pollingInterval = null;
-          
-          if (result.cancelled) {
-            statusEl.textContent = "已取消選取。";
-            return;
-          }
-
-          statusEl.textContent = "傳送至 Bridge 進行圖片下載與存檔中...";
-          
-          // Clear result on page
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: () => { window.__khSelectionResult = null; }
-          });
-
-          // Post to Bridge
-          const folderInput = document.getElementById('clipper-folder').value.trim();
-          const payload = {
-            url: tab.url,
-            title: folderInput || tab.title, // Use custom folder/title if provided
-            html: result.html, // Send raw HTML to be converted to MD by Bridge
-            images: (result.imageUrls || []).map(u => ({ url: u })) // Map array of strings to array of objects
-          };
-
-          const saveRes = await fetch(`${Config.BRIDGE_URL}/save`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          });
-          
-          if (!saveRes.ok) throw new Error("Bridge save failed: " + saveRes.status);
-          const saveJson = await saveRes.json();
-          statusEl.innerHTML = `✅ 儲存成功！<br>目錄：~/honoka-docs/${folderInput || '網頁標題'}<br>檔案：${saveJson.file || 'index.md'}`;
-
-        }
-      } catch (e) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-        statusEl.textContent = `❌ 錯誤：${e.message}`;
+    // Delegate everything to background.js (survives popup close)
+    chrome.runtime.sendMessage({
+      action: "startClipper",
+      tabId: tab.id,
+      tabUrl: tab.url,
+      tabTitle: tab.title,
+      folderName: folderInput || ""
+    }, (response) => {
+      if (response?.ok) {
+        statusEl.textContent = "✅ 選取模式已啟動！你可以關閉此視窗，放心到網頁上選取區塊。選完後點「確認並剪輯」即會自動存檔。";
+      } else {
+        statusEl.textContent = `❌ 錯誤：${response?.error || '未知錯誤'}`;
       }
-    }, 1000);
+    });
 
   } catch (e) {
     statusEl.textContent = "發生錯誤：" + e.message;
   }
 });
+
+// Listen for result from background (if popup is still open)
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action === "clipperResult") {
+    const statusEl = document.getElementById('clipper-status');
+    if (msg.success) {
+      statusEl.innerHTML = `✅ 儲存成功！<br>目錄：~/honoka-docs/${msg.folder}<br>檔案：${msg.file}`;
+    } else {
+      statusEl.textContent = `❌ 儲存失敗：${msg.error}`;
+    }
+  }
+});
+

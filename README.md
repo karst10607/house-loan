@@ -57,6 +57,11 @@
 
 ## 更新紀錄 (Change Log)
 
+### v1.1.0 (2026-04-28) — 架構重構：Clipper 終於能存了！
+- **根治 Clipper 完全無法存檔的根本原因**：發現 Chrome Extension 的 popup 視窗在使用者點擊網頁去選取區塊的瞬間會被系統強制關閉，導致 popup 中的 polling 計時器直接消失，選完的內容永遠沒有人接收。
+- **解決方案**：將 Clipper 的核心邏輯（注入選取器、輪詢結果、傳送至 Bridge）全部搬進 `background.js` (Service Worker)。Service Worker 不會因為 popup 關閉而被終止，確保整個剪輯流程從頭到尾都能完成。
+- **改善使用體驗**：現在點擊「開始框選」後，popup 會提示你「可以關閉此視窗，放心去選取」。選取完成後，背景會自動儲存，不再需要 popup 保持開啟。
+
 ### v1.0.9 (2026-04-28)
 - **根治 Clipper 無法存檔問題**：`turndown` 套件未安裝導致 Bridge 在收到 HTML 資料時 crash。已在 `honoka-bridge` 目錄執行 `npm install turndown` 完成安裝，並驗證 HTML→Markdown 端到端轉換正常運作。
 - **修正錯誤被靜默吞噬**：`popup.js` 的 polling 迴圈的 `catch` 過去完全靜默（即使 Bridge 崩潰也看不到錯誤訊息），現在已改為在介面上顯示 `❌ 錯誤: xxx`，未來絕不再有無聲無息的失敗。
