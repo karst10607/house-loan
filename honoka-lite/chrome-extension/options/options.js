@@ -1900,14 +1900,25 @@ $("#bridge-status").addEventListener("click", (e) => {
     <div class="bp-row"><span>Node</span><span>${escapeHtml(info.nodeVersion || "?")}</span></div>
     <div class="bp-actions">
       <button class="btn btn-sm ${bridgeBehind ? "" : "btn-secondary"}" id="bp-restart" ${bridgeBehind ? 'style="background:var(--danger);color:#fff"' : ""}>↻ Restart${bridgeBehind ? " (update)" : ""}</button>
-      <button class="btn btn-sm btn-secondary" id="bp-close">Close</button>
+      <button class="btn btn-sm btn-secondary" id="bp-shutdown" style="color:var(--danger)">🛑 Shutdown</button>
     </div>`;
   pop.classList.remove("hidden");
   const dotRect = $("#bridge-status").getBoundingClientRect();
   pop.style.top = (dotRect.bottom + 8) + "px";
   pop.style.left = dotRect.left + "px";
 
-  pop.querySelector("#bp-close").addEventListener("click", () => pop.classList.add("hidden"));
+  pop.querySelector("#bp-shutdown").addEventListener("click", async () => {
+    if (!confirm("Completely shut down the Honoka Bridge server?\n\n(On Windows, this stops the process. On Linux, systemd may restart it automatically.)")) return;
+    try {
+      await fetch(`${BRIDGE_URL}/shutdown`);
+      showStatus("Shutdown command sent. Bridge is stopping.");
+      pop.classList.add("hidden");
+      setTimeout(checkBridge, 2000);
+    } catch (e) {
+      showStatus("Failed to send shutdown command.");
+    }
+  });
+
   pop.querySelector("#bp-restart").addEventListener("click", async () => {
     const btn = pop.querySelector("#bp-restart");
     btn.textContent = "Restarting…";

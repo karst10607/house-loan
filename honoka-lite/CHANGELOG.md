@@ -9,7 +9,7 @@
 ## v1.2.8
 
 ### Features
-- **Remote Shutdown Dashboard**: Visiting `http://localhost:44124/status` now shows a beautiful web dashboard with a **"Shut Down Server"** button. This provides an easy way for users to exit the background process without using the Command Line or Task Manager.
+- **Remote Shutdown Dashboard**: Visiting `http://localhost:44124` now shows a beautiful web dashboard with a **"Shut Down Server"** button. This provides an easy way for users to exit the background process without using the Command Line or Task Manager.
 - **Improved Windows Installer**: Updated `install-windows.bat` to leverage the v1.2.7 `--install` automation.
 
 ## v1.2.7
