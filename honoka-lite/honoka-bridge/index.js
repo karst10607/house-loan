@@ -1614,7 +1614,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.3.0";
+const BRIDGE_VERSION = "1.3.1";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {

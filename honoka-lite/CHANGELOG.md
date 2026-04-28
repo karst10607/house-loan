@@ -1,5 +1,11 @@
 # Honoka Lite Changelog
 
+## v1.3.1
+
+### Fixes
+- **Build Pipeline**: Fixed incorrect paths in GitHub Actions workflow to ensure cross-platform binaries are generated correctly.
+- **Improved Distribution**: Release assets now come in organized `.zip` files containing both the **Honoka Bridge** binary and the **Chrome Extension** folder for easier setup.
+
 ## v1.3.0
 
 ### Features
