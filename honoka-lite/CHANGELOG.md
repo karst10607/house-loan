@@ -7,6 +7,7 @@
   - **Root Cause**: Recent updates to the `jsdom` dependency tree (specifically `html-encoding-sniffer`) moved to Pure ESM. In Node 18, using `require()` on these modules throws a fatal error that was previously crashing the bot's startup sequence.
   - **Fix**: Re-implemented dependency loading using "Lazy Dynamic Imports" (`await import()`). This allows the Bridge to load modern ESM dependencies safely even within a CommonJS environment on older Node versions.
 - **Improved Startup Resilience**: Bot dependencies are now loaded on-demand, preventing the entire Bridge from failing if a single sub-dependency has a version conflict.
+PS:My linux systemd for auto-restart is using older version of nodejs, but my terminial is running node 20, I just forced update them to the latest. But this fix can save others from the same problems. 
 
 ## v1.2.5
 
