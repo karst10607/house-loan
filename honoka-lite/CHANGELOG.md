@@ -1,5 +1,13 @@
 # Honoka Lite Changelog
 
+## v1.2.7
+
+### Features
+- **One-Click Portable Installation (Windows)**: Added a new `--install` command line flag for the compiled Honoka Bridge binary. 
+  - Running `honoka-bridge.exe --install` will automatically register the Bridge to start silently in the background whenever Windows boots up.
+  - This eliminates the need for manual `.vbs` creation or moving files to the Startup folder.
+- **Improved Cross-Platform Binary Support**: Enhanced the binary build configuration to ensure that Node.js 20 features and ESM compatibility work perfectly inside the standalone `.exe` and macOS/Linux binaries.
+
 ## v1.2.6
 
 ### Bug Fixes & Stability

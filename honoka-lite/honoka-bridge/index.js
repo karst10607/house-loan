@@ -1614,7 +1614,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.2.6";
+const BRIDGE_VERSION = "1.2.7";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
@@ -2457,6 +2457,26 @@ const server = http.createServer(async (req, res) => {
     json(res, 500, { error: err.message });
   }
 });
+
+// ── Windows Startup Installer ──
+if (process.platform === "win32" && process.argv.includes("--install")) {
+  try {
+    const startupDir = path.join(process.env.APPDATA, "Microsoft", "Windows", "Start Menu", "Programs", "Startup");
+    const vbsPath = path.join(startupDir, "honoka-bridge.vbs");
+    const exePath = process.execPath;
+    
+    const vbsContent = `Set WshShell = CreateObject("WScript.Shell")\nWshShell.Run """${exePath}""", 0, False`;
+    fs.writeFileSync(vbsPath, vbsContent);
+    
+    console.log("\n✅ Honoka Bridge has been added to your Windows Startup!");
+    console.log(`📍 Shortcut created: ${vbsPath}`);
+    console.log("🚀 It will now run silently in the background whenever you log in.\n");
+    process.exit(0);
+  } catch (err) {
+    console.error("\n❌ Failed to add to startup:", err.message);
+    process.exit(1);
+  }
+}
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`\n  Honoka Bridge v${BRIDGE_VERSION} (pid ${process.pid})`);
