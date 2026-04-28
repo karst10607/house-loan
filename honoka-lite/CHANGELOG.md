@@ -1,5 +1,11 @@
 # Honoka Lite Changelog
 
+## v1.3.5
+
+### Features
+- **Live Download Progress**: The Telegram bot now shows real-time percentage updates when downloading videos via `yt-dlp`.
+- **Throttled Updates**: Progress updates are throttled to every 3 seconds to stay within Telegram API rate limits.
+
 ## v1.3.4
 
 ### Features

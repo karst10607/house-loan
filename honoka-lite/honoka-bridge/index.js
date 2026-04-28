@@ -1615,7 +1615,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.3.4";
+const BRIDGE_VERSION = "1.3.5";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
@@ -2403,19 +2403,37 @@ function initTelegramBot() {
         const isVideoSite = /x\.com|twitter\.com|youtube\.com|youtu\.be|drive\.google\.com|vimeo\.com|bilibili\.com/i.test(rawUrl);
         
         if (isVideoSite) {
-          await bot.sendMessage(chatId, `🎬 Video site detected: ${rawUrl}\n🚀 Attempting universal download via yt-dlp...`);
+          const statusMsg = await bot.sendMessage(chatId, `🎬 Video site detected: ${rawUrl}\n🚀 Starting universal download...`);
           try {
-            const videoResult = await downloadUniversalVideo(rawUrl);
-            await bot.sendMessage(chatId, `✅ *Video Saved!*\n\n📁 \`${videoResult.filename}\`\nℹ️ Saved to \`Inbound_Videos\` folder.`, { parse_mode: "Markdown" });
-            continue; // Success! Skip normal HTML scraping
+            let lastUpdate = 0;
+            const videoResult = await downloadUniversalVideo(rawUrl, async (progress) => {
+              // Throttle updates to avoid Telegram rate limits (max once every 3 seconds)
+              const now = Date.now();
+              if (now - lastUpdate > 3000) {
+                lastUpdate = now;
+                await bot.editMessageText(`🎬 *Downloading Video* …\n\n🔗 ${rawUrl}\n📊 *Progress:* ${progress}\n⏳ Please wait, this may take a while.`, {
+                  chat_id: chatId,
+                  message_id: statusMsg.message_id,
+                  parse_mode: "Markdown"
+                }).catch(() => {}); // Ignore edit errors
+              }
+            });
+            await bot.editMessageText(`✅ *Video Saved!*\n\n📁 \`${videoResult.filename}\`\nℹ️ Saved to \`Inbound_Videos\` folder.`, {
+              chat_id: chatId,
+              message_id: statusMsg.message_id,
+              parse_mode: "Markdown"
+            });
+            continue; 
           } catch (vErr) {
             console.error("yt-dlp universal error:", vErr.message);
-            // If it's a Google Drive link and it failed, it's often due to permissions
             const failMsg = rawUrl.includes("drive.google.com") 
-              ? "yt-dlp failed (Google Drive might require authentication or the file is private)."
-              : `yt-dlp failed: ${vErr.message.substring(0, 100)}`;
+              ? "Google Drive failed (Check permissions/auth)."
+              : `Download failed: ${vErr.message.substring(0, 100)}`;
             
-            await bot.sendMessage(chatId, `⚠️ ${failMsg}\nFalling back to normal text scraping...`);
+            await bot.editMessageText(`⚠️ ${failMsg}\nFalling back to normal text scraping...`, {
+              chat_id: chatId,
+              message_id: statusMsg.message_id
+            });
           }
         }
 
@@ -2497,7 +2515,7 @@ function initTelegramBot() {
 /**
  * Downloads video from various sites using yt-dlp (Universal)
  */
-async function downloadUniversalVideo(url) {
+async function downloadUniversalVideo(url, onProgress) {
   const videoDir = path.join(DOCS_DIR, "Inbound_Videos");
   if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
 
@@ -2510,6 +2528,7 @@ async function downloadUniversalVideo(url) {
     // Command: yt-dlp -o "pattern" "url"
     const proc = spawn("yt-dlp", [
       "--no-playlist",
+      "--newline", // Crucial for parsing progress
       "--merge-output-format", "mp4",
       "--no-check-certificates",
       "-o", outputPattern,
@@ -2517,6 +2536,15 @@ async function downloadUniversalVideo(url) {
     ]);
 
     let stderr = "";
+    proc.stdout.on("data", (data) => {
+      const line = data.toString();
+      // Look for: [download]  15.0% of 100MB at ...
+      const match = line.match(/\[download\]\s+(\d+\.\d+%)/);
+      if (match && onProgress) {
+        onProgress(match[1]);
+      }
+    });
+
     proc.stderr.on("data", (data) => { stderr += data.toString(); });
     
     proc.on("close", (code) => {
