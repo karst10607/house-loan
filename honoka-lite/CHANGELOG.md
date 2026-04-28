@@ -1,5 +1,10 @@
 # Honoka Lite Changelog
 
+## v1.3.0
+
+### Features
+- **Integrated Extension Shutdown**: Replaced the "Close" button in the Chrome Extension GUI with a real **"🛑 Shutdown"** button. You can now stop the background server directly from the extension.
+
 ## v1.2.9
 
 ### Fixes
