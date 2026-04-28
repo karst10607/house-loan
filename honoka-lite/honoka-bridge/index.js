@@ -19,6 +19,9 @@ if (cluster.isPrimary || cluster.isMaster) {
   return;
 }
 
+// Worker code starts here
+require('dns').setDefaultResultOrder('ipv4first');
+
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -1611,7 +1614,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.2.4";
+const BRIDGE_VERSION = "1.2.5";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {

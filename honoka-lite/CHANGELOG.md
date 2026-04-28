@@ -1,5 +1,12 @@
 # Honoka Lite Changelog
 
+## v1.2.5
+
+### Bug Fixes & Stability
+- **Fixed Telegram Bot "Silent Hangs" (Linux Networking Patch)**: Resolved a critical issue where the Telegram bot would stop responding to messages despite the Bridge being online.
+  - **Root Cause**: Node.js 18+ defaults to IPv6. On many Linux environments with incomplete IPv6 routing, the Bridge would attempt to connect to Telegram via IPv6 and "hang" for up to 30 seconds before failing. This caused `AggregateError` and `ETIMEDOUT` errors that blocked the message handler.
+  - **Fix**: Implemented `dns.setDefaultResultOrder('ipv4first')` in the Bridge core. This forces the Bridge to prioritize IPv4, ensuring instant and reliable connectivity to Telegram and external websites on Linux, Mac, and Windows.
+
 ## v1.2.4
 
 ### Features
