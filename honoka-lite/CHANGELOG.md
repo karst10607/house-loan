@@ -1,5 +1,11 @@
 # Honoka Lite Changelog
 
+## v1.2.9
+
+### Fixes
+- **Extension Compatibility**: Restored JSON response for `/status` endpoint to fix "Offline" status in Chrome Extension.
+- **GUI Migration**: Moved the HTML Status Dashboard to the root route (`/`).
+
 ## v1.2.8
 
 ### Features
