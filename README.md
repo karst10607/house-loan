@@ -57,6 +57,16 @@
 
 ## 更新紀錄 (Change Log)
 
+### v1.2.1 (2026-04-28) — 整合 Telegram Bot 與 系統穩定性強化 (重要更新)
+- **實作 Telegram Bot 整合**：現在可以將網址直接傳給 Telegram 機器人，Bridge 會自動爬取網頁內容、解析主文並存入 `honoka-inbox`。
+- **動態 Settings UI**：建立 `/settings` 網頁介面，支援動態修改 Bot Token 與 Allowed User ID，修改後自動生效。
+- **Settings 安全性提升**：設定資訊持久化存儲於 `~/.honoka-docs/.honoka/settings.json`（已加入 .gitignore）。UI 加入 👁️/👓 切換，可在本機端安全查看完整 Token。
+- **根治 Bridge 重啟卡死 (Critical Fix)**：
+    - **問題**：原本 Bridge 的重啟邏輯會被 Telegram Bot 的 Long Polling 連線卡住，導致 `server.close()` 永遠無法完成 callback。
+    - **技術解決方案**：在重啟前強制呼叫 `bot.stopPolling()`，並加入 2 秒強制退出（Force-exit）保險機制，確保系統在任何情況下都能成功重啟。**未來實作 Slack Bot 時必須遵循此模式**。
+- **重建 Charts 報表原始碼**：將 `honoka-charts` 從純 `dist` 狀態還原為完整的 `src/` 開發架構，並修正了舊版 Hardcode Port `7749` 的問題，現在報表在任何 Port 都能正常運作。
+- **版本全線對齊**：將 Extension, Bridge, Charts 全部對齊至 `v1.2.1`。
+
 ### v1.1.1 (2026-04-28) — 存儲優化：收件匣 (Inbox) 分流 與 版本對齊
 - **實作目錄分流**：Clipper 抓取的資料現在會預設存入 `~/honoka-inbox/`，而從 Notion 同步的文件保留在 `~/honoka-docs/`。
 - **版本號對齊**：將 `honoka-bridge` 與 `honoka-extension` 的版本號統一對齊為 `v1.1.1`，方便追蹤整套工具鏈的相容性。

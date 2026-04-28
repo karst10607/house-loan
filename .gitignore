@@ -34,7 +34,11 @@ yarn-error.log*
 .env*
 
 # Honoka tools and portable builds
-# honoka*
+gh_*
+clips/
+Clips/
+honoka-docs/
+honoka-inbox/
 !honoka-lite/
 
 # typescript

@@ -5,7 +5,9 @@ export default defineConfig({
   server: {
     port: 7750,
     proxy: {
-      "/history": "http://127.0.0.1:7749",
+      "/history": "http://127.0.0.1:44124",
+      "/list": "http://127.0.0.1:44124",
+      "/api": "http://127.0.0.1:44124",
     },
   },
   build: {

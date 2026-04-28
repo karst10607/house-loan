@@ -2200,6 +2200,6 @@ loadAll(async () => {
     await fetchLocalDocs();
     await fetchTemplates();
     showSyncDot(false);
-    renderSidebar();
+    renderAll();
   }, 15000);
 });

@@ -56,4 +56,27 @@
 2. 到 Chrome 擴充功能頁面點擊「重新載入」。
 3. 點擊任何網頁的 Honoka 圖示，切換到「Clipper」分頁，點擊開始選取，測試是否能正常框選並存入本地端。
 
-> **AI 執行提示**：請依照上述 1 到 4 的階段順序讀取並修改公司版的原始碼。若在合併 `popup.js` 時遇到衝突，請優先保留公司版既有的「字數分析 (Token Analysis)」邏輯，並疊加新的 Tab 與 Clipper 邏輯。
+---
+
+## 第五階段：v1.2.1 功能整合 (Telegram Bot & Stability)
+
+此版本重點在於跨平台輸入整合與系統穩定性提升。
+
+1. **Telegram Bot 整合**：
+   - 在 Bridge 端實作了 `initTelegramBot()`，支援從 Settings UI 動態設定 Token。
+   - **核心邏輯**：使用 `@mozilla/readability` 抓取主文並轉為 Markdown。
+   - **已知限制**：目前 Telegram 抓取尚不支持自動下載圖片，需後續優化。
+
+2. **重啟機制修復 (Critical)**：
+   - 修正了 `handleRestart` 邏輯。在重啟前必須手動關閉 Telegram Bot 的 Long Polling 連線，否則 `server.close()` 會卡死。
+   - 程式碼範例：
+     ```javascript
+     if (_telegramBot) { _telegramBot.stopPolling(); _telegramBot = null; }
+     server.close(() => spawnAndExit());
+     ```
+
+3. **Settings UI 加入**：
+   - 新增了 `/settings` 路由，提供前端界面管理配置。
+   - 密碼/Token 欄位加入 👁️ 切換顯示功能，提升操作便利性。
+
+> **AI 執行提示**：在合併 Bridge 邏輯時，請確保 `node-telegram-bot-api` 已正確安裝於 `node_modules` 中。

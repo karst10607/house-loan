@@ -1,5 +1,24 @@
 #!/usr/bin/env node
 
+const cluster = require('cluster');
+
+if (cluster.isPrimary || cluster.isMaster) {
+  console.log(`[Honoka Manager] Starting Bridge on port ${process.env.HONOKA_PORT || "44124"}...`);
+  cluster.fork();
+
+  cluster.on('exit', (worker, code, signal) => {
+    console.log(`[Honoka Manager] Bridge worker died (code: ${code}). Restarting in 1.5s...`);
+    setTimeout(() => cluster.fork(), 1500);
+  });
+  
+  // Forward SIGINT to exit cleanly
+  process.on('SIGINT', () => {
+    console.log(`[Honoka Manager] Shutting down...`);
+    process.exit(0);
+  });
+  return;
+}
+
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -12,6 +31,40 @@ const DOCS_DIR = process.env.HONOKA_DOCS_DIR
   : path.join(require("os").homedir(), "honoka-docs");
 const INBOX_DIR = path.join(require("os").homedir(), "honoka-inbox");
 const EDITOR = process.env.HONOKA_EDITOR || "cursor";
+
+// ── Settings store (bot tokens, etc.) persisted to ~/.honoka-docs/.honoka/settings.json ──
+// This lets the Honoka UI manage credentials without touching environment variables.
+
+const SETTINGS_FILE = path.join(
+  process.env.HONOKA_DOCS_DIR
+    ? path.resolve(process.env.HONOKA_DOCS_DIR)
+    : path.join(require("os").homedir(), "honoka-docs"),
+  ".honoka",
+  "settings.json"
+);
+
+function readSettings() {
+  try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8")); }
+  catch { return {}; }
+}
+
+function writeSettings(s) {
+  fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 2));
+}
+
+// Merge env-var overrides on top of stored settings at startup.
+// This keeps backward-compat for people who DO set env vars.
+function getEffectiveSettings() {
+  const stored = readSettings();
+  return {
+    ...stored,
+    telegramBotToken:     process.env.TELEGRAM_BOT_TOKEN     || stored.telegramBotToken     || "",
+    telegramAllowedUser:  process.env.TELEGRAM_ALLOWED_USER   || stored.telegramAllowedUser  || "",
+    slackBotToken:        process.env.SLACK_BOT_TOKEN         || stored.slackBotToken        || "",
+    slackAllowedChannel:  process.env.SLACK_ALLOWED_CHANNEL   || stored.slackAllowedChannel  || "",
+  };
+}
 
 // Resolve editor binary — Launch Agents have a minimal PATH that
 // typically doesn't include app-bundled CLIs like Cursor or VS Code.
@@ -165,66 +218,53 @@ function json(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
-// ── Handlers ──
+// ── Shared save-to-disk pipeline (used by HTTP /save AND Telegram bot) ──
 
-async function handleSave(req, res) {
-  const body = await readBody(req);
-  const { pageId, title, markdown, html, images, properties, url } = body;
+async function saveToDisk(data) {
+  const { pageId, title, markdown, html, images, properties, url, source: srcOverride, category: catOverride } = data;
 
-  if (!title && !pageId) return json(res, 400, { error: "title or pageId required" });
+  if (!title && !pageId) throw new Error("title or pageId required");
 
-  const source = body.source || (pageId ? "notion" : "clip");
-  const baseDir = (source === "clip") ? INBOX_DIR : DOCS_DIR;
-  
+  const source = srcOverride || (pageId ? "notion" : "clip");
+  const baseDir = (source === "clip" || source === "telegram") ? INBOX_DIR : DOCS_DIR;
+
   const slug = resolveFolder(pageId, title, url, baseDir);
   const docDir = path.join(baseDir, slug);
   const imgDir = path.join(docDir, "images");
   fs.mkdirSync(imgDir, { recursive: true });
 
   let md = markdown || "";
-  
+
   if (html && !md) {
     try {
-      const TurndownService = require('turndown');
-      const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-      md = turndownService.turndown(html);
+      const TurndownService = require("turndown");
+      const td = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+      md = td.turndown(html);
     } catch (e) {
       console.error("Turndown failed:", e);
-      md = html; // Fallback to HTML if turndown fails
+      md = html;
     }
   }
 
-  // Save images — prefer base64 data from browser (has cookies), fallback to download
+  // Save images
   if (images && images.length > 0) {
     for (const img of images) {
       const filename = img.filename || `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.png`;
       const dest = path.join(imgDir, filename);
       let saved = false;
 
-      // Option 1: base64 data URL from the content script
       if (img.dataUrl && img.dataUrl.startsWith("data:")) {
         try {
           const base64Data = img.dataUrl.split(",")[1];
-          if (base64Data) {
-            fs.writeFileSync(dest, Buffer.from(base64Data, "base64"));
-            saved = true;
-          }
-        } catch (err) {
-          console.error(`Failed to write base64 for ${filename}: ${err.message}`);
-        }
+          if (base64Data) { fs.writeFileSync(dest, Buffer.from(base64Data, "base64")); saved = true; }
+        } catch (err) { console.error(`Failed to write base64 for ${filename}: ${err.message}`); }
       }
 
-      // Option 2: download from URL (works for public images)
       if (!saved && img.url && (img.url.startsWith("http://") || img.url.startsWith("https://"))) {
-        try {
-          await downloadImage(img.url, dest);
-          saved = true;
-        } catch (err) {
-          console.error(`Failed to download ${img.url}: ${err.message}`);
-        }
+        try { await downloadImage(img.url, dest); saved = true; }
+        catch (err) { console.error(`Failed to download ${img.url}: ${err.message}`); }
       }
 
-      // Rewrite URL in markdown to local relative path
       if (saved) {
         const originalRef = img.originalSrc || img.url;
         if (originalRef) md = md.split(originalRef).join(`./images/${filename}`);
@@ -240,8 +280,7 @@ async function handleSave(req, res) {
   }
   if (!bestTitle) bestTitle = title || "Untitled";
 
-  // Add frontmatter if not present
-  const category = body.category || "reference";
+  const category = catOverride || "reference";
   if (!md.startsWith("---")) {
     const fm = [
       "---",
@@ -249,7 +288,7 @@ async function handleSave(req, res) {
       `source: ${source}`,
       `category: ${category}`,
       pageId ? `page_id: "${pageId}"` : null,
-      url ? `notion_url: "${url}"` : null,
+      url ? `url: "${url}"` : null,
       `saved_at: "${new Date().toISOString()}"`,
       properties ? `properties:` : null,
     ].filter(Boolean);
@@ -262,15 +301,6 @@ async function handleSave(req, res) {
     md = fm.join("\n");
   }
 
-  // Keep previous version for diffing
-  const indexPath = path.join(docDir, "index.md");
-  if (fs.existsSync(indexPath)) {
-    try { fs.copyFileSync(indexPath, path.join(docDir, "index.prev.md")); } catch { }
-  }
-
-  fs.writeFileSync(indexPath, md, "utf8");
-
-  // Update registry
   const reg = readRegistry();
   reg[pageId || slug] = {
     folder: slug,
@@ -282,7 +312,25 @@ async function handleSave(req, res) {
   };
   writeRegistry(reg);
 
-  json(res, 200, { ok: true, folder: slug, path: docDir });
+  // Save content
+  fs.writeFileSync(path.join(docDir, "index.md"), md, "utf8");
+  if (html) {
+    fs.writeFileSync(path.join(docDir, "source.html"), html, "utf8");
+  }
+
+  return { ok: true, slug, folder: slug, path: docDir };
+}
+
+// ── Handlers ──
+
+async function handleSave(req, res) {
+  const body = await readBody(req);
+  try {
+    const result = await saveToDisk(body);
+    json(res, 200, { ok: true, ...result });
+  } catch (err) {
+    json(res, 400, { error: err.message });
+  }
 }
 
 async function handleNew(req, res) {
@@ -573,6 +621,102 @@ function handlePreview(req, res) {
 
   const baseDir = (folder && fs.existsSync(path.join(INBOX_DIR, folder))) ? INBOX_DIR : DOCS_DIR;
   const indexPath = path.join(baseDir, folder, "index.md");
+  const htmlPath = path.join(baseDir, folder, "source.html");
+  if (!fs.existsSync(indexPath)) return json(res, 404, { error: "not found" });
+
+  const raw = fs.readFileSync(indexPath, "utf8");
+  let isTelegram = false;
+  if (raw.startsWith("---")) {
+    const end = raw.indexOf("---", 3);
+    if (end !== -1) {
+      const fm = raw.substring(0, end);
+      if (fm.includes("source: telegram")) isTelegram = true;
+    }
+  }
+
+  const hasHtml = fs.existsSync(htmlPath);
+  const defaultFormat = (isTelegram && hasHtml) ? "html" : "md";
+
+  cors(res);
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Honoka Preview</title>
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; }
+    iframe { width: 100%; height: 100%; border: none; }
+    .toggle-bar {
+      position: absolute; top: 16px; right: 24px;
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 8px; padding: 4px;
+      display: flex; gap: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      z-index: 9999;
+    }
+    .toggle-btn {
+      background: transparent; border: none; padding: 6px 12px; border-radius: 6px;
+      font-size: 13px; font-weight: 500; color: #555; cursor: pointer; transition: all 0.2s;
+    }
+    .toggle-btn:hover { background: rgba(0,0,0,0.05); color: #000; }
+    .toggle-btn.active { background: #fff; color: #0969da; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="toggle-bar">
+    <button id="btn-html" class="toggle-btn ${defaultFormat === 'html' ? 'active' : ''}" ${!hasHtml ? 'disabled title="Original HTML not available"' : ''}>🌐 Original Web</button>
+    <button id="btn-md" class="toggle-btn ${defaultFormat === 'md' ? 'active' : ''}">📝 Markdown</button>
+  </div>
+  <iframe id="preview-frame" sandbox="allow-same-origin allow-scripts allow-popups" src="/preview-content?folder=${encodeURIComponent(folder)}&format=${defaultFormat}"></iframe>
+
+  <script>
+    const frame = document.getElementById('preview-frame');
+    const btnHtml = document.getElementById('btn-html');
+    const btnMd = document.getElementById('btn-md');
+    
+    btnHtml.addEventListener('click', () => {
+      if (btnHtml.disabled) return;
+      btnHtml.classList.add('active');
+      btnMd.classList.remove('active');
+      frame.src = '/preview-content?folder=${encodeURIComponent(folder)}&format=html';
+    });
+    
+    btnMd.addEventListener('click', () => {
+      btnMd.classList.add('active');
+      btnHtml.classList.remove('active');
+      frame.src = '/preview-content?folder=${encodeURIComponent(folder)}&format=md';
+    });
+  </script>
+</body>
+</html>
+  `);
+}
+
+function handlePreviewContent(req, res) {
+  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const folder = url.searchParams.get("folder");
+  const format = url.searchParams.get("format") || "md";
+  if (!folder || folder.includes("..") || folder.includes("/")) {
+    return json(res, 400, { error: "invalid folder" });
+  }
+
+  const baseDir = (folder && fs.existsSync(path.join(INBOX_DIR, folder))) ? INBOX_DIR : DOCS_DIR;
+  
+  if (format === "html") {
+    const htmlPath = path.join(baseDir, folder, "source.html");
+    if (!fs.existsSync(htmlPath)) return json(res, 404, { error: "html not found" });
+    cors(res);
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(fs.readFileSync(htmlPath, "utf8"));
+    return;
+  }
+
+  const indexPath = path.join(baseDir, folder, "index.md");
   if (!fs.existsSync(indexPath)) return json(res, 404, { error: "not found" });
 
   const raw = fs.readFileSync(indexPath, "utf8");
@@ -584,7 +728,7 @@ function handlePreview(req, res) {
     if (end !== -1) md = md.substring(end + 3).trim();
   }
 
-  // Minimal markdown → HTML (headings, bold, italic, images, links, code, lists, hr, blockquotes)
+  // Minimal markdown → HTML
   const html = renderMarkdown(md, folder);
 
   cors(res);
@@ -1467,15 +1611,11 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = (() => {
-  try {
-    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "chrome-extension", "manifest.json"), "utf8"));
-    return manifest.version || "unknown";
-  } catch { return "unknown"; }
-})();
+const BRIDGE_VERSION = "1.2.4";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
+  const settings = getEffectiveSettings();
   json(res, 200, {
     ok: true,
     version: BRIDGE_VERSION,
@@ -1492,25 +1632,83 @@ function handleStatus(req, res) {
           .length;
       } catch { return 0; }
     })(),
+    integrations: {
+      telegram: !!settings.telegramBotToken,
+      slack:    !!settings.slackBotToken,
+    },
   });
+}
+
+// ── Settings API (GET returns masked values, POST updates persisted settings) ──
+
+function handleSettingsGet(req, res) {
+  const s = getEffectiveSettings();
+  json(res, 200, {
+    telegramBotToken:    s.telegramBotToken || "",
+    telegramAllowedUser: s.telegramAllowedUser || "",
+    slackBotToken:       s.slackBotToken || "",
+    slackAllowedChannel: s.slackAllowedChannel || "",
+    _telegramSet:        !!s.telegramBotToken,
+    _slackSet:           !!s.slackBotToken,
+  });
+}
+
+async function handleSettingsPost(req, res) {
+  const body = await readBody(req);
+  const stored = readSettings();
+
+  // Only update fields explicitly sent; ignore empty strings for token fields
+  // (so clearing UI doesn't accidentally nuke a previously-saved token).
+  const FIELDS = ["telegramBotToken", "telegramAllowedUser", "slackBotToken", "slackAllowedChannel"];
+  let changed = false;
+  for (const field of FIELDS) {
+    if (field in body) {
+      const val = String(body[field]).trim();
+      // A value starting with '****' means the UI echoed back our masked value — skip.
+      if (val) {
+        stored[field] = val;
+        changed = true;
+      } else if (val === "") {
+        // Explicit empty string means "clear this field"
+        stored[field] = "";
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    writeSettings(stored);
+    // Re-initialise Telegram bot if token changed
+    initTelegramBot();
+  }
+
+  json(res, 200, { ok: true, changed });
 }
 
 function handleRestart(req, res) {
   json(res, 200, { ok: true, message: "Restarting bridge..." });
   console.log("  ↻ Restart requested via /restart endpoint");
   setTimeout(() => {
+    // Stop Telegram bot FIRST (its polling keeps connections alive)
+    if (_telegramBot) {
+      try { _telegramBot.stopPolling(); } catch { }
+      _telegramBot = null;
+    }
+
+    // Force-exit failsafe: if server.close() hangs, exit anyway after 2s
+    const forceTimer = setTimeout(() => {
+      console.log("  ↻ Force-exiting (server.close timed out)");
+      process.exit(0);
+    }, 2000);
+    forceTimer.unref();
+
     server.close(() => {
-      const { spawn } = require("child_process");
-      const child = spawn(process.argv[0], process.argv.slice(1), {
-        detached: true,
-        stdio: "ignore",
-        env: process.env,
-      });
-      child.unref();
+      clearTimeout(forceTimer);
       process.exit(0);
     });
   }, 300);
 }
+
 
 // ── History ingest (fire-and-forget from extension) ──
 
@@ -1876,6 +2074,308 @@ function handleHistoryDump(req, res) {
   json(res, 200, [...deduped.values()]);
 }
 
+// ── Settings UI Page ──
+// ── Settings UI Page ──
+function serveSettingsPage(res) {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Honoka Settings</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #e0e0e0; max-width: 600px; margin: 40px auto; padding: 20px; line-height: 1.6; }
+    h1 { border-bottom: 1px solid #0f3460; padding-bottom: 10px; margin-bottom: 30px; }
+    .group { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #0f3460; }
+    h2 { font-size: 1.2em; margin-top: 0; color: #4db8ff; }
+    label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 0.9em; }
+    .input-wrap { position: relative; margin-bottom: 15px; }
+    input[type="text"], input[type="password"] { width: 100%; padding: 8px; background: #111; border: 1px solid #333; color: #fff; border-radius: 4px; box-sizing: border-box; }
+    .toggle-pwd { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #888; cursor: pointer; font-size: 1.2em; padding: 0 5px; }
+    .toggle-pwd:hover { color: #fff; }
+    button.submit-btn { background: #0f3460; color: #fff; border: none; padding: 12px 20px; cursor: pointer; border-radius: 4px; font-weight: bold; width: 100%; margin-top: 10px; }
+    button.submit-btn:hover { background: #e94560; }
+    p.desc { font-size: 0.85em; color: #888; margin-bottom: 15px; margin-top: 5px; }
+    .status { margin-top: 20px; text-align: center; color: #4db8ff; min-height: 24px; }
+  </style>
+</head>
+<body>
+  <h1>Honoka Settings</h1>
+  <form id="settingsForm">
+    <div class="group">
+      <h2>Telegram Bot Integration</h2>
+      <p class="desc">Forward links to your bot on Telegram to save them directly to Honoka.</p>
+      
+      <label>Telegram Bot Token</label>
+      <div class="input-wrap">
+        <input type="password" id="telegramBotToken" placeholder="e.g. 123456789:ABCdefGHIjklMNO...">
+        <button type="button" class="toggle-pwd" onclick="togglePwd('telegramBotToken')">👁️</button>
+      </div>
+      <p class="desc">Get this from @BotFather. Leave blank to disable.</p>
+      
+      <label>Allowed User ID (Optional, Recommended)</label>
+      <div class="input-wrap">
+        <input type="text" id="telegramAllowedUser" placeholder="Your Telegram User ID">
+      </div>
+      <p class="desc">Only process messages from this user ID to prevent spam.</p>
+    </div>
+
+    <div class="group">
+      <h2>Slack Bot Integration (Future)</h2>
+      <label>Slack Bot Token</label>
+      <div class="input-wrap">
+        <input type="password" id="slackBotToken" placeholder="xoxb-...">
+        <button type="button" class="toggle-pwd" onclick="togglePwd('slackBotToken')">👁️</button>
+      </div>
+      
+      <label>Allowed Channel ID</label>
+      <div class="input-wrap">
+        <input type="text" id="slackAllowedChannel" placeholder="C0123456789">
+      </div>
+    </div>
+
+    <button type="submit" class="submit-btn">Save Settings</button>
+    <div class="status" id="statusMsg"></div>
+  </form>
+
+  <script>
+    function togglePwd(id) {
+      const input = document.getElementById(id);
+      const btn = input.nextElementSibling;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '👓';
+      } else {
+        input.type = 'password';
+        btn.textContent = '👁️';
+      }
+    }
+
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if (data._telegramSet) {
+          const el = document.getElementById('telegramBotToken');
+          el.value = data.telegramBotToken;
+        }
+        document.getElementById('telegramAllowedUser').value = data.telegramAllowedUser || '';
+        if (data._slackSet) {
+          const el = document.getElementById('slackBotToken');
+          el.value = data.slackBotToken;
+        }
+        document.getElementById('slackAllowedChannel').value = data.slackAllowedChannel || '';
+      } catch (err) {
+        console.error('Failed to load settings', err);
+      }
+    }
+
+    document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const statusMsg = document.getElementById('statusMsg');
+      statusMsg.textContent = 'Saving...';
+      
+      const payload = {
+        telegramBotToken: document.getElementById('telegramBotToken').value,
+        telegramAllowedUser: document.getElementById('telegramAllowedUser').value,
+        slackBotToken: document.getElementById('slackBotToken').value,
+        slackAllowedChannel: document.getElementById('slackAllowedChannel').value
+      };
+
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        
+        if (result.ok) {
+          statusMsg.textContent = 'Settings saved successfully! Bridge updated.';
+          statusMsg.style.color = '#4db8ff';
+          setTimeout(loadSettings, 500); // Reload to show masked tokens
+        } else {
+          statusMsg.textContent = 'Failed to save: ' + (result.error || 'Unknown error');
+          statusMsg.style.color = '#e94560';
+        }
+      } catch (err) {
+        statusMsg.textContent = 'Network error saving settings.';
+        statusMsg.style.color = '#e94560';
+      }
+      
+      setTimeout(() => { if(statusMsg.textContent.includes('successfully')) statusMsg.textContent = ''; }, 3000);
+    });
+
+    loadSettings();
+  </script>
+</body>
+</html>`;
+  res.writeHead(200, { "Content-Type": "text/html" });
+  res.end(html);
+}
+
+
+// ── Telegram Bot ──
+
+let _telegramBot = null;
+
+function initTelegramBot() {
+  // Teardown existing bot if any
+  if (_telegramBot) {
+    try { _telegramBot.stopPolling(); } catch { }
+    _telegramBot = null;
+  }
+
+  const settings = getEffectiveSettings();
+  const token = settings.telegramBotToken;
+  if (!token) {
+    console.log("  Telegram: no token set — bot disabled (configure via /api/settings)");
+    return;
+  }
+
+  let TelegramBot;
+  try { TelegramBot = require("node-telegram-bot-api"); }
+  catch { console.error("  Telegram: node-telegram-bot-api not installed — run npm install"); return; }
+
+  let axios, JSDOM, Readability, TurndownService;
+  try {
+    axios = require("axios");
+    ({ JSDOM } = require("jsdom"));
+    ({ Readability } = require("@mozilla/readability"));
+    TurndownService = require("turndown");
+  } catch (e) {
+    console.error("  Telegram: missing dependency —", e.message, "— run npm install");
+    return;
+  }
+
+  const bot = new TelegramBot(token, {
+    polling: {
+      interval: 1000,        // poll every 1s (not as aggressive)
+      autoStart: true,
+      params: { timeout: 30 }, // long-poll 30s per request
+    },
+  });
+  _telegramBot = bot;
+  console.log("  Telegram: bot started ✓");
+
+  const URL_RE = /https?:\/\/[^\s<>"]+/gi;
+
+  // Throttle polling error logs and force restart bot on fatal disconnects
+  let _lastPollingErr = 0;
+  let _errCount = 0;
+  bot.on("polling_error", (err) => {
+    const now = Date.now();
+    if (now - _lastPollingErr > 30000) {
+      console.error("  Telegram: polling error:", err.message);
+      _lastPollingErr = now;
+      _errCount = 1;
+    } else {
+      _errCount++;
+    }
+    // We no longer call bot.stopPolling() here because the cluster manager 
+    // handles hard restarts. By not stopping, the bot library will automatically 
+    // reconnect when the network becomes available again!
+  });
+
+  bot.on("message", async (msg) => {
+    try {
+      const chatId = msg.chat.id;
+      const fromId = String(msg.from?.id || "");
+      const allowedUser = getEffectiveSettings().telegramAllowedUser;
+
+      // Security: ignore messages from non-authorised users if a restriction is set.
+      if (allowedUser && fromId !== allowedUser) {
+        console.log(`  Telegram: ignored message from ${fromId} (not in allowedUser list)`);
+        return;
+      }
+
+      const text = msg.text || msg.caption || "";
+      const urls = text.match(URL_RE);
+
+      if (!urls || urls.length === 0) {
+        // Echo help if no URL found
+        await bot.sendMessage(chatId, "📌 Send me a URL and I'll save it to your Honoka inbox!");
+        return;
+      }
+
+      for (const rawUrl of urls) {
+        const statusMsg = await bot.sendMessage(chatId, `⏳ Fetching ${rawUrl} …`);
+        try {
+          // Fetch the page
+          const resp = await axios.get(rawUrl, {
+            timeout: 20000,
+            headers: { 
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+            },
+            maxContentLength: 10 * 1024 * 1024,
+          });
+
+          const contentType = resp.headers["content-type"] || "";
+          if (!contentType.includes("html")) {
+            await bot.editMessageText(`⚠️ ${rawUrl}\nNot an HTML page (${contentType}). Skipped.`, { chat_id: chatId, message_id: statusMsg.message_id });
+            continue;
+          }
+
+          // Parse with Readability
+          const dom = new JSDOM(resp.data, { url: rawUrl });
+          const reader = new Readability(dom.window.document);
+          const article = reader.parse();
+
+          if (!article || !article.content) {
+            await bot.editMessageText(`⚠️ Could not extract article from ${rawUrl} (Readability failed).`, { chat_id: chatId, message_id: statusMsg.message_id });
+            continue;
+          }
+
+          await bot.editMessageText(`📦 Article parsed: "${article.title}"\n💾 Saving to Honoka...`, { chat_id: chatId, message_id: statusMsg.message_id });
+
+          // Convert to Markdown
+          const td = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+          const markdown = td.turndown(article.content || "");
+
+          // Save via shared pipeline
+          const result = await saveToDisk({
+            title:    article.title || rawUrl,
+            markdown,
+            html:     resp.data, // <--- Pass raw HTML here!
+            url:      rawUrl,
+            source:   "telegram",
+            category: "reference",
+          });
+
+          await bot.editMessageText(`✅ *Saved successfully!*\n\n📄 *${article.title || "Untitled"}*\n📁 \`${result.folder}\`\n\n[Open in Browser](http://127.0.0.1:44124/charts/)`, { 
+            chat_id: chatId, 
+            message_id: statusMsg.message_id,
+            parse_mode: "Markdown" 
+          });
+
+        } catch (err) {
+          console.error("Telegram fetch error:", err.message);
+          let errMsg = err.message;
+          if (err.response?.status === 401 || err.response?.status === 403) {
+            errMsg = `Access Denied (HTTP ${err.response.status}). This page might be private or have a paywall.`;
+          } else if (err.code === 'ECONNABORTED') {
+            errMsg = `Timeout: The website took too long to respond.`;
+          }
+          await bot.editMessageText(`❌ *Failed to save*\nURL: ${rawUrl}\nReason: ${errMsg}`, { 
+            chat_id: chatId, 
+            message_id: statusMsg.message_id,
+            parse_mode: "Markdown" 
+          });
+        }
+      }
+    } catch (criticalErr) {
+      console.error("  Telegram: Critical error in message handler:", criticalErr.message);
+    }
+  });
+
+  bot.on("polling_error", (err) => {
+    console.error("Telegram polling error:", err.message);
+  });
+}
+
+// Start bot on launch (will no-op if no token is configured)
+initTelegramBot();
+
 // ── Server ──
 
 const server = http.createServer(async (req, res) => {
@@ -1899,10 +2399,14 @@ const server = http.createServer(async (req, res) => {
     if (route === "/api/templates" && req.method === "POST") return await handleTemplatesPost(req, res);
     if (route === "/api/templates" && req.method === "DELETE") return await handleTemplatesDelete(req, res);
     if (route === "/preview" && req.method === "GET") return handlePreview(req, res);
+    if (route === "/preview-content" && req.method === "GET") return handlePreviewContent(req, res);
     if (route === "/diff" && req.method === "GET") return handleDiff(req, res);
     if (route === "/batch-report" && req.method === "GET") return handleBatchReport(req, res);
     if (route === "/api/batch-compare" && req.method === "POST") return await handleBatchCompare(req, res);
     if (route === "/restart" && req.method === "POST") return handleRestart(req, res);
+    if (route === "/api/settings" && req.method === "GET") return handleSettingsGet(req, res);
+    if (route === "/api/settings" && req.method === "POST") return await handleSettingsPost(req, res);
+    if (route === "/settings" && req.method === "GET") return serveSettingsPage(res);
     if (route === "/history/ingest" && req.method === "POST") return await handleHistoryIngest(req, res);
     if (route === "/history/dump" && req.method === "GET") return handleHistoryDump(req, res);
     // Serve honoka-charts dashboard
