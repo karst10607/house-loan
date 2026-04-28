@@ -1614,32 +1614,67 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.2.7";
+const BRIDGE_VERSION = "1.2.8";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
   const settings = getEffectiveSettings();
-  json(res, 200, {
-    ok: true,
-    version: BRIDGE_VERSION,
-    docsDir: DOCS_DIR,
-    editor: EDITOR,
-    port: PORT,
-    pid: process.pid,
-    startedAt,
-    nodeVersion: process.version,
-    docCount: (() => {
-      try {
-        return fs.readdirSync(DOCS_DIR, { withFileTypes: true })
-          .filter((e) => e.isDirectory() && !e.name.startsWith("."))
-          .length;
-      } catch { return 0; }
-    })(),
-    integrations: {
-      telegram: !!settings.telegramBotToken,
-      slack:    !!settings.slackBotToken,
-    },
-  });
+  const uptime = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+  const docCount = (() => {
+    try {
+      return fs.readdirSync(DOCS_DIR, { withFileTypes: true })
+        .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+        .length;
+    } catch { return 0; }
+  })();
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Honoka Bridge Status</title>
+      <style>
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 2rem; line-height: 1.5; max-width: 600px; margin: 0 auto; background: #f9fafb; }
+        .card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; }
+        h1 { margin-top: 0; color: #111827; font-size: 1.25rem; display: flex; align-items: center; justify-content: space-between; }
+        .status-tag { background: #dcfce7; color: #166534; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .detail { margin: 0.5rem 0; color: #4b5563; font-size: 0.9rem; }
+        code { background: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
+        .actions { margin-top: 1.5rem; border-top: 1px solid #f3f4f6; padding-top: 1rem; }
+        .btn-shutdown { 
+          display: inline-block; padding: 0.5rem 1rem; background: #fee2e2; color: #991b1b; 
+          text-decoration: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500;
+          border: 1px solid #fecaca; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-shutdown:hover { background: #fecaca; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h1>Honoka Bridge <span class="status-tag">ACTIVE</span></h1>
+        <div class="detail"><b>Version:</b> ${BRIDGE_VERSION}</div>
+        <div class="detail"><b>Node:</b> ${process.version}</div>
+        <div class="detail"><b>Port:</b> ${PORT}</div>
+        <div class="detail"><b>Docs:</b> <code>${DOCS_DIR}</code> (<b>${docCount}</b> dirs)</div>
+        <div class="detail"><b>Uptime:</b> ${uptime}s</div>
+        
+        <div class="actions">
+          <a href="/shutdown" class="btn-shutdown" onclick="return confirm('Shut down Honoka Bridge? You will need to restart it manually or reboot.')">🛑 Shut Down Server</a>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
+}
+
+function handleShutdown(req, res) {
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end("<h1>Honoka Bridge is shutting down...</h1><p>You can close this tab now.</p>");
+  console.log("\n[Honoka] Shutdown requested via web interface.");
+  setTimeout(() => process.exit(0), 1000);
 }
 
 // ── Settings API (GET returns masked values, POST updates persisted settings) ──
@@ -2407,6 +2442,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (route === "/status" && req.method === "GET") return handleStatus(req, res);
+    if (route === "/shutdown" && req.method === "GET") return handleShutdown(req, res);
     if (route === "/list" && req.method === "GET") return handleList(req, res);
     if (route === "/save" && req.method === "POST") return await handleSave(req, res);
     if (route === "/new" && req.method === "POST") return await handleNew(req, res);

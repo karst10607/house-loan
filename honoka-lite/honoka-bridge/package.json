@@ -1,6 +1,6 @@
 {
   "name": "honoka-bridge",
-  "version": "1.2.7",
+  "version": "1.2.8",
   "description": "Local bridge server for Honoka — saves Notion docs and images to disk, opens in Cursor/VS Code",
   "bin": "index.js",
   "engines": {

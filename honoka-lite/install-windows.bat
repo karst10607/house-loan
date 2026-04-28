@@ -16,21 +16,22 @@ if %errorlevel% neq 0 (
 
 :: ======== 2. 安裝 Honoka Bridge 伺服器 ========
 echo [1/2] 設定 Honoka Bridge 背景執行...
-set "STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-set "VBS_FILE=%STARTUP_FOLDER%\honoka-bridge.vbs"
 
 :: 關閉舊版程序
-WMIC PROCESS WHERE "Name='node.exe' AND CommandLine LIKE '%%honoka-bridge%%'" CALL Terminate >nul 2>nul
+taskkill /F /IM honoka-bridge.exe /T >nul 2>nul
 timeout /t 1 /nobreak >nul
 
-:: 建立背景執行 VBS
-echo Set WshShell = CreateObject("WScript.Shell") > "%VBS_FILE%"
-echo WshShell.Environment("Process").Item("HONOKA_PORT") = "7749" >> "%VBS_FILE%"
-echo WshShell.Environment("Process").Item("HONOKA_EDITOR") = "cursor" >> "%VBS_FILE%"
-echo WshShell.Run "node """ ^& "%BRIDGE_DIR%\index.js" ^& """", 0, False >> "%VBS_FILE%"
-
-:: 立即啟動新版 Bridge
-cscript //nologo "%VBS_FILE%"
+:: 使用內建的 --install 指令註冊到啟動資料夾 (不需要手動建立 VBS)
+if exist "%BRIDGE_DIR%\bin\honoka-bridge.exe" (
+    "%BRIDGE_DIR%\bin\honoka-bridge.exe" --install
+) else (
+    echo [警告] 找不到 honoka-bridge.exe，嘗試使用 Node 啟動...
+    set "STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+    set "VBS_FILE=%STARTUP_FOLDER%\honoka-bridge.vbs"
+    echo Set WshShell = CreateObject("WScript.Shell") > "%VBS_FILE%"
+    echo WshShell.Run "node """ ^& "%BRIDGE_DIR%\index.js" ^& """", 0, False >> "%VBS_FILE%"
+    cscript //nologo "%VBS_FILE%"
+)
 
 :: ======== 3. 安裝 Chrome 擴充功能 ========
 echo [2/2] 登錄 Chrome 擴充功能...
