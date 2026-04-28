@@ -1,5 +1,11 @@
 # Honoka Lite Changelog
 
+## v1.3.2
+
+### Features
+- **X (Twitter) Video Downloader**: Integrated `yt-dlp` to download high-quality videos from X/Twitter without needing the official API.
+- **Automatic Video Archiving**: Videos are saved to `Inbound_Videos` with a corresponding `.md` sidecar file for indexing.
+
 ## v1.3.1
 
 ### Fixes

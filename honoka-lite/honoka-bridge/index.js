@@ -27,6 +27,7 @@ const fs = require("fs");
 const path = require("path");
 const { execFile, exec } = require("child_process");
 const https = require("https");
+const { spawn } = require("child_process");
 
 const PORT = parseInt(process.env.HONOKA_PORT || "44124", 10);
 const DOCS_DIR = process.env.HONOKA_DOCS_DIR
@@ -1614,7 +1615,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.3.1";
+const BRIDGE_VERSION = "1.3.2";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
@@ -2370,6 +2371,20 @@ function initTelegramBot() {
       }
 
       for (const rawUrl of urls) {
+        const isX = rawUrl.includes("x.com") || rawUrl.includes("twitter.com");
+        
+        if (isX) {
+          await bot.sendMessage(chatId, `🎬 Detected X video: ${rawUrl}\n🚀 Attempting to download via yt-dlp...`);
+          try {
+            const videoResult = await downloadXVideo(rawUrl);
+            await bot.sendMessage(chatId, `✅ *Video Saved!*\n\n📁 \`${videoResult.filename}\`\nℹ️ Saved to \`Inbound_Videos\` folder.`, { parse_mode: "Markdown" });
+            continue; // Skip normal HTML scraping for X links
+          } catch (vErr) {
+            console.error("yt-dlp error:", vErr.message);
+            await bot.sendMessage(chatId, `⚠️ yt-dlp failed: ${vErr.message.substring(0, 100)}\nFalling back to normal text scraping...`);
+          }
+        }
+
         const statusMsg = await bot.sendMessage(chatId, `⏳ Fetching ${rawUrl} …`);
         try {
           // Fetch the page
@@ -2442,6 +2457,57 @@ function initTelegramBot() {
 
   bot.on("polling_error", (err) => {
     console.error("Telegram polling error:", err.message);
+  });
+}
+
+/**
+ * Downloads video from X/Twitter using yt-dlp
+ */
+async function downloadXVideo(url) {
+  const videoDir = path.join(DOCS_DIR, "Inbound_Videos");
+  if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
+
+  return new Promise((resolve, reject) => {
+    // Generate a safe filename base
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const outputPattern = path.join(videoDir, `X-Video-${timestamp}-%(title)s.%(ext)s`);
+
+    console.log(`[Honoka] Starting yt-dlp for: ${url}`);
+    
+    // Command: yt-dlp -o "pattern" "url"
+    const proc = spawn("yt-dlp", [
+      "--no-playlist",
+      "--merge-output-format", "mp4",
+      "-o", outputPattern,
+      url
+    ]);
+
+    let stderr = "";
+    proc.stderr.on("data", (data) => { stderr += data.toString(); });
+    
+    proc.on("close", (code) => {
+      if (code === 0) {
+        // Try to find the file we just downloaded (since title is dynamic)
+        const files = fs.readdirSync(videoDir);
+        const matching = files.find(f => f.startsWith(`X-Video-${timestamp}`));
+        
+        // Also create a small .md sidecar
+        if (matching) {
+          const sidecarPath = path.join(videoDir, matching + ".md");
+          fs.writeFileSync(sidecarPath, `# X Video Download\n\n- **Source:** ${url}\n- **Date:** ${new Date().toLocaleString()}\n- **File:** ${matching}\n`);
+        }
+        
+        resolve({ success: true, filename: matching || "Video saved" });
+      } else {
+        reject(new Error(`yt-dlp exited with code ${code}. Error: ${stderr}`));
+      }
+    });
+
+    // Timeout failsafe: 2 minutes
+    setTimeout(() => {
+      proc.kill();
+      reject(new Error("yt-dlp timed out after 2 minutes"));
+    }, 120000);
   });
 }
 
