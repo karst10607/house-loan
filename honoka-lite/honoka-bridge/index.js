@@ -1615,7 +1615,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.3.2";
+const BRIDGE_VERSION = "1.3.4";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
@@ -2399,17 +2399,23 @@ function initTelegramBot() {
       }
 
       for (const rawUrl of urls) {
-        const isX = rawUrl.includes("x.com") || rawUrl.includes("twitter.com");
+        // Detect video sites (X, YouTube, Google Drive, Bilibili, etc.)
+        const isVideoSite = /x\.com|twitter\.com|youtube\.com|youtu\.be|drive\.google\.com|vimeo\.com|bilibili\.com/i.test(rawUrl);
         
-        if (isX) {
-          await bot.sendMessage(chatId, `🎬 Detected X video: ${rawUrl}\n🚀 Attempting to download via yt-dlp...`);
+        if (isVideoSite) {
+          await bot.sendMessage(chatId, `🎬 Video site detected: ${rawUrl}\n🚀 Attempting universal download via yt-dlp...`);
           try {
-            const videoResult = await downloadXVideo(rawUrl);
+            const videoResult = await downloadUniversalVideo(rawUrl);
             await bot.sendMessage(chatId, `✅ *Video Saved!*\n\n📁 \`${videoResult.filename}\`\nℹ️ Saved to \`Inbound_Videos\` folder.`, { parse_mode: "Markdown" });
-            continue; // Skip normal HTML scraping for X links
+            continue; // Success! Skip normal HTML scraping
           } catch (vErr) {
-            console.error("yt-dlp error:", vErr.message);
-            await bot.sendMessage(chatId, `⚠️ yt-dlp failed: ${vErr.message.substring(0, 100)}\nFalling back to normal text scraping...`);
+            console.error("yt-dlp universal error:", vErr.message);
+            // If it's a Google Drive link and it failed, it's often due to permissions
+            const failMsg = rawUrl.includes("drive.google.com") 
+              ? "yt-dlp failed (Google Drive might require authentication or the file is private)."
+              : `yt-dlp failed: ${vErr.message.substring(0, 100)}`;
+            
+            await bot.sendMessage(chatId, `⚠️ ${failMsg}\nFalling back to normal text scraping...`);
           }
         }
 
@@ -2489,23 +2495,23 @@ function initTelegramBot() {
 }
 
 /**
- * Downloads video from X/Twitter using yt-dlp
+ * Downloads video from various sites using yt-dlp (Universal)
  */
-async function downloadXVideo(url) {
+async function downloadUniversalVideo(url) {
   const videoDir = path.join(DOCS_DIR, "Inbound_Videos");
   if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
 
   return new Promise((resolve, reject) => {
-    // Generate a safe filename base
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const outputPattern = path.join(videoDir, `X-Video-${timestamp}-%(title)s.%(ext)s`);
+    const outputPattern = path.join(videoDir, `Video-${timestamp}-%(title)s.%(ext)s`);
 
-    console.log(`[Honoka] Starting yt-dlp for: ${url}`);
+    console.log(`[Honoka] Starting universal yt-dlp for: ${url}`);
     
     // Command: yt-dlp -o "pattern" "url"
     const proc = spawn("yt-dlp", [
       "--no-playlist",
       "--merge-output-format", "mp4",
+      "--no-check-certificates",
       "-o", outputPattern,
       url
     ]);
@@ -2515,14 +2521,12 @@ async function downloadXVideo(url) {
     
     proc.on("close", (code) => {
       if (code === 0) {
-        // Try to find the file we just downloaded (since title is dynamic)
         const files = fs.readdirSync(videoDir);
-        const matching = files.find(f => f.startsWith(`X-Video-${timestamp}`));
+        const matching = files.find(f => f.startsWith(`Video-${timestamp}`));
         
-        // Also create a small .md sidecar
         if (matching) {
           const sidecarPath = path.join(videoDir, matching + ".md");
-          fs.writeFileSync(sidecarPath, `# X Video Download\n\n- **Source:** ${url}\n- **Date:** ${new Date().toLocaleString()}\n- **File:** ${matching}\n`);
+          fs.writeFileSync(sidecarPath, `# Video Download\n\n- **Source:** ${url}\n- **Date:** ${new Date().toLocaleString()}\n- **File:** ${matching}\n`);
         }
         
         resolve({ success: true, filename: matching || "Video saved" });

@@ -1,5 +1,17 @@
 # Honoka Lite Changelog
 
+## v1.3.4
+
+### Features
+- **Universal Video Downloader**: Expanded video capture to support **Google Drive**, YouTube, Bilibili, and more via `yt-dlp`.
+- **Bypass Restrictions**: Capable of downloading Google Drive videos even when the "Download" button is disabled by the owner (for shared/public links).
+
+## v1.3.3
+
+### Features
+- **System Capability Detection**: The Dashboard now checks for the presence of `yt-dlp` and `ffmpeg` and provides installation guides if missing.
+- **Improved UI**: Cleaned up the Bridge Dashboard for better visibility of system status.
+
 ## v1.3.2
 
 ### Features
