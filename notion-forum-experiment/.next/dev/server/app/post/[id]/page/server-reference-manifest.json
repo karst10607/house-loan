@@ -1,0 +1,29 @@
+{
+  "node": {
+    "400ac6913a9aab835c4cb42d54d41253077b5d3042": {
+      "workers": {
+        "app/post/[id]/page": {
+          "moduleId": "[project]/.next-internal/server/app/post/[id]/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "submitComment",
+          "filename": "src/app/actions.ts"
+        }
+      },
+      "exportedName": "submitComment",
+      "filename": "src/app/actions.ts"
+    },
+    "40931aa7e2c1cc507e7708a421e569e553848d8785": {
+      "workers": {
+        "app/post/[id]/page": {
+          "moduleId": "[project]/.next-internal/server/app/post/[id]/page/actions.js { ACTIONS_MODULE0 => \"[project]/src/app/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false,
+          "exportedName": "submitPost",
+          "filename": "src/app/actions.ts"
+        }
+      },
+      "exportedName": "submitPost",
+      "filename": "src/app/actions.ts"
+    }
+  },
+  "edge": {}
+}

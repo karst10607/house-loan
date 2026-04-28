@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Honoka Analytics</title>
+  <script type="module" crossorigin src="/charts/assets/index-e4S9i-Wz.js"></script>
+  <link rel="stylesheet" crossorigin href="/charts/assets/index-CnvfktAB.css">
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <h1>Honoka Analytics</h1>
+      <span id="entry-count" class="badge">—</span>
+      <span id="date-range" class="header-dim">—</span>
+      <span id="auto-refresh-indicator" class="header-dim" title="Auto-refreshes every 30s"></span>
+    </div>
+    <div class="header-actions">
+      <button id="export-csv-btn" class="hdr-btn" title="Export filtered data as CSV">CSV</button>
+      <button id="export-pdf-btn" class="hdr-btn" title="Print / Save as PDF">PDF</button>
+      <button id="reload-btn" class="hdr-btn">↻ Reload</button>
+    </div>
+  </header>
+
+  <div class="date-filter-bar">
+    <label>From <input type="date" id="filter-from"></label>
+    <label>To <input type="date" id="filter-to"></label>
+    <button id="filter-apply" class="hdr-btn">Apply</button>
+    <button id="filter-reset" class="hdr-btn btn-dim">Reset</button>
+    <span id="filter-count" class="header-dim"></span>
+  </div>
+
+  <div class="source-exclude-bar">
+    <span class="source-exclude-label">Exclude sources:</span>
+    <div id="source-exclude-tags" class="source-exclude-tags"></div>
+    <input type="text" id="source-exclude-input" class="source-exclude-input" placeholder="Type author or URL fragment + Enter…" autocomplete="off">
+    <button id="source-exclude-clear" class="hdr-btn btn-dim" title="Clear all source exclusions">Clear</button>
+    <span id="source-exclude-count" class="header-dim"></span>
+  </div>
+
+  <main>
+    <section class="chart-card">
+      <div class="card-header">
+        <h2>Visit Timeline</h2>
+        <button class="save-png-btn" data-chart="chart-timeline" title="Save as PNG">PNG</button>
+      </div>
+      <p class="chart-desc">Daily page visit activity — drag the slider below to zoom, all charts follow</p>
+      <div id="chart-timeline" class="chart-container"></div>
+    </section>
+
+    <section class="chart-card">
+      <div class="card-header">
+        <h2>Token Distribution</h2>
+        <button class="save-png-btn" data-chart="chart-tokens" title="Save as PNG">PNG</button>
+      </div>
+      <p class="chart-desc">Token count distribution across all tracked pages</p>
+      <div id="chart-tokens" class="chart-container"></div>
+    </section>
+
+    <section class="chart-card">
+      <div class="card-header">
+        <h2>Top Pages by Visit Count</h2>
+        <button class="save-png-btn" data-chart="chart-top-pages" title="Save as PNG">PNG</button>
+      </div>
+      <p class="chart-desc">Click a bar to open the page in Notion</p>
+      <div id="chart-top-pages" class="chart-container"></div>
+    </section>
+
+    <section class="chart-card">
+      <div class="card-header">
+        <h2>Author Distribution</h2>
+        <button class="save-png-btn" data-chart="chart-authors" title="Save as PNG">PNG</button>
+      </div>
+      <p class="chart-desc">Pages created by each author (from Notion API metadata)</p>
+      <div id="chart-authors" class="chart-container"></div>
+    </section>
+
+    <section class="chart-card">
+      <div class="card-header">
+        <h2>Document Lifecycle</h2>
+        <button class="save-png-btn" data-chart="chart-lifecycle" title="Save as PNG">PNG</button>
+      </div>
+      <p class="chart-desc">Click a dot to open page — size = tokens, color = complexity</p>
+      <div id="chart-lifecycle" class="chart-container"></div>
+    </section>
+
+    <section class="chart-card">
+      <div class="card-header">
+        <h2>Property Stacked Area</h2>
+        <button class="save-png-btn" data-chart="chart-stacked" title="Save as PNG">PNG</button>
+      </div>
+      <p class="chart-desc">Cumulative document count by property value over time</p>
+      <div id="chart-stacked" class="chart-container"></div>
+      <div class="chart-controls">
+        <label>Property: <select id="stacked-prop-select"></select></label>
+      </div>
+    </section>
+
+  </main>
+
+  <section class="data-table-section">
+    <div class="table-header">
+      <h2>Data Table</h2>
+      <input type="text" id="table-search" class="table-search" placeholder="Search title, author, URL…" autocomplete="off">
+      <span id="table-count" class="header-dim"></span>
+    </div>
+    <div id="data-table-wrap" class="data-table-wrap"></div>
+  </section>
+
+</body>
+</html>

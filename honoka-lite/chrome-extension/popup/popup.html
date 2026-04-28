@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <h1>Honoka Lite</h1>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tab-analysis">Analysis</button>
+      <button class="tab-btn" data-tab="tab-clipper">Clipper</button>
+    </div>
+
+    <!-- Analysis Tab -->
+    <div id="tab-analysis" class="tab-content active">
+      <div class="settings">
+        <label>
+          Doc budget (tokens available for this doc):
+          <select id="budget">
+            <option value="8000">8K (small context / many files open)</option>
+            <option value="16000">16K (typical single doc ref)</option>
+            <option value="24000" selected>24K (recommended for design docs)</option>
+            <option value="32000">32K (large context share)</option>
+            <option value="64000">64K (dedicated doc review)</option>
+            <option value="128000">128K (full context, doc only)</option>
+          </select>
+        </label>
+        <label>
+          Estimation method:
+          <select id="method">
+            <option value="auto" selected>Auto-detect (recommended)</option>
+            <option value="claude">Claude BPE (exact)</option>
+            <option value="chars/4">Char ÷ 4 (English text)</option>
+            <option value="words*1.3">Words × 1.3 (mixed prose/code)</option>
+            <option value="chars/3">Char ÷ 3 (CJK-heavy docs)</option>
+            <option value="code">Code-weighted (code-heavy)</option>
+          </select>
+        </label>
+      </div>
+
+      <button id="analyze">Re-analyze page</button>
+      <p class="hint">Auto-analyzes on page load and refreshes as you edit.</p>
+
+      <div id="summary" class="summary hidden"></div>
+      <div id="section-list"></div>
+      <div id="method-info" class="method-info hidden"></div>
+
+      <div class="history-section">
+        <div class="history-header">
+          <strong>Recent Notion Pages</strong>
+          <button id="clear-history" class="clear-btn" title="Clear history">Clear</button>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </div>
+      <button id="open-library" class="library-btn">Open Doc Library</button>
+    </div>
+
+    <!-- Clipper Tab -->
+    <div id="tab-clipper" class="tab-content">
+      <div class="clipper-panel">
+        <p>擷取當前網頁並將其儲存為本地 Markdown，支援視覺化選取與圖片自動本地化。</p>
+        
+        <label style="display:block; margin: 10px 0;">
+          儲存目錄 (可選):
+          <input type="text" id="clipper-folder" placeholder="預設使用網頁標題" style="width: 100%; margin-top: 4px; padding: 4px;" />
+        </label>
+
+        <button id="start-clipper" class="clip-btn">開始視覺選取</button>
+        <div id="clipper-status" class="hint" style="margin-top: 10px; min-height: 20px; color: #2dd4bf;"></div>
+      </div>
+    </div>
+  </div>
+  <script src="../src/config.js" type="module"></script>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

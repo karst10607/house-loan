@@ -1,0 +1,23 @@
+{
+  "name": "honoka-bridge",
+  "version": "0.1.0",
+  "description": "Local bridge server for Honoka — saves Notion docs and images to disk, opens in Cursor/VS Code",
+  "main": "index.js",
+  "bin": {
+    "honoka-bridge": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "notion",
+    "honoka",
+    "bridge",
+    "cursor"
+  ],
+  "license": "MIT",
+  "author": "",
+  "dependencies": {
+    "turndown": "^7.2.4"
+  }
+}

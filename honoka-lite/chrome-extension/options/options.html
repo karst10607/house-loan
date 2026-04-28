@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>Honoka — Doc Library</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+
+<body>
+  <div class="layout">
+
+    <!-- ── Sidebar (folder tree) ── -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <strong>Honoka</strong>
+        <span class="bridge-dot-wrap">
+          <span id="bridge-status" class="bridge-dot" title="Bridge: checking..."></span>
+          <div id="bridge-popover" class="bridge-popover hidden"></div>
+        </span>
+      </div>
+      <div class="sidebar-actions">
+        <button id="new-doc-btn" class="sidebar-btn">+ New doc</button>
+        <button id="new-folder-btn" class="sidebar-btn sidebar-btn-secondary">+ Folder</button>
+      </div>
+      <div class="sidebar-fixed">
+        <div class="sidebar-item sidebar-item-fixed" data-view="all">
+          <span class="si-icon">📄</span> All pages
+          <span class="si-badge" id="badge-all"></span>
+        </div>
+        <div class="sidebar-item sidebar-item-fixed" data-view="local">
+          <span class="si-icon">💾</span> Local docs
+          <span class="si-badge" id="badge-local"></span>
+        </div>
+        <div class="sidebar-item sidebar-item-fixed" data-view="local:mine">
+          <span class="si-icon">✏️</span> My docs
+          <span class="si-badge" id="badge-mine"></span>
+        </div>
+        <div class="sidebar-item sidebar-item-fixed" data-view="local:reference">
+          <span class="si-icon">📎</span> References
+          <span class="si-badge" id="badge-ref"></span>
+        </div>
+        <div class="sidebar-item sidebar-item-fixed" data-view="favorites">
+          <span class="si-icon">★</span> Favorites
+          <span class="si-badge" id="badge-favs"></span>
+        </div>
+        <div class="sidebar-item sidebar-item-fixed" data-view="recent">
+          <span class="si-icon">🕐</span> Recent
+        </div>
+        <div class="sidebar-item" id="open-analytics" title="Open analytics dashboard (requires Bridge)">
+          <span class="si-icon">📊</span> Analytics
+        </div>
+        <div class="sidebar-item" id="open-csv-viewer" title="Open CSV Viewer — no Bridge needed">
+          <span class="si-icon">📈</span> CSV Viewer
+        </div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div id="folder-tree" class="folder-tree"></div>
+      <div class="theme-switcher">
+        <div class="theme-switcher-label">Theme</div>
+        <div class="theme-options" id="theme-options">
+          <div class="theme-swatch" data-theme="light" title="Light"></div>
+          <div class="theme-swatch" data-theme="dark" title="Dark"></div>
+          <div class="theme-swatch" data-theme="midnight" title="Midnight"></div>
+          <div class="theme-swatch" data-theme="sakura" title="Sakura"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main content ── -->
+    <main class="main">
+      <div class="main-header">
+        <h1 id="view-title">All pages</h1>
+        <div class="main-actions">
+          <button id="refresh-meta" class="btn btn-sm" title="Pull latest metadata from Notion (who edited, when)">⟳
+            Refresh</button>
+          <button id="export-md" class="btn btn-sm btn-secondary">Export .md</button>
+          <button id="export-csv" class="btn btn-sm btn-secondary">Export CSV</button>
+          <button id="export-json" class="btn btn-sm btn-secondary">Export JSON</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <input type="text" id="search-box" class="search-box" placeholder="Search title, properties, author…"
+            autocomplete="off">
+          <button id="delete-selected" class="btn btn-sm btn-danger" disabled>Delete selected</button>
+          <button id="compare-selected" class="btn btn-sm btn-secondary hidden"
+            title="Compare two selected docs side-by-side">Compare</button>
+          <button id="set-template-btn" class="btn btn-sm btn-secondary hidden" title="Register this doc as a reusable comparison template">Register as Template</button>
+          <button id="batch-compare-btn" class="btn btn-sm btn-secondary hidden" title="Run Template Analysis">Run Template Analysis</button>
+          <span id="select-info" class="select-info"></span>
+        </div>
+        <div class="toolbar-right">
+          <div class="column-chooser-wrap">
+            <button id="column-chooser-btn" class="btn btn-sm btn-secondary" title="Choose visible columns">Columns
+              ▾</button>
+            <div id="column-chooser" class="column-chooser hidden"></div>
+          </div>
+          <label for="my-name" class="toolbar-label"
+            title="Comma-separated aliases to match against Notion created_by">My name:</label>
+          <input type="text" id="my-name" class="toolbar-input" placeholder="e.g. H Wu, hwu" autocomplete="off"
+            style="width:180px" title="Comma-separated names/aliases">
+          <span id="notion-user-badge" class="toolbar-badge" style="display:none"
+            title="Auto-detected Notion user"></span>
+          <label for="history-limit" class="toolbar-label">Keep:</label>
+          <select id="history-limit" class="toolbar-select">
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200" selected>200</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+            <option value="0">∞</option>
+          </select>
+          <button id="clear-history" class="btn btn-sm btn-danger">Clear all</button>
+          <button id="sync-to-bridge" class="btn btn-sm btn-secondary"
+            title="Push all history entries to Bridge for durable storage">Sync to Bridge</button>
+          <button id="export-backup" class="btn btn-sm btn-secondary"
+            title="Export all settings, history, folders as JSON">Export Honoka backup</button>
+          <button id="import-backup" class="btn btn-sm btn-secondary" title="Import a previously exported backup">Import
+            Honoka backup</button>
+          <input type="file" id="import-file" accept=".json" style="display:none">
+        </div>
+      </div>
+
+      <div id="history-table" class="history-table"></div>
+
+      <div id="status" class="status hidden"></div>
+    </main>
+  </div>
+
+  <div id="rename-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3 id="modal-title">Rename folder</h3>
+      <input type="text" id="modal-input" maxlength="80">
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn btn-sm btn-secondary">Cancel</button>
+        <button id="modal-ok" class="btn btn-sm">OK</button>
+      </div>
+    </div>
+  </div>
+
+    </div>
+  </div>
+
+  <div id="bridge-setup-modal" class="modal hidden">
+    <div class="modal-content modal-wide">
+      <h3>Honoka Bridge Setup</h3>
+      <p class="setup-desc">The bridge is a tiny Node.js server that lets Honoka save docs, preview, and diff locally.
+        Replace <code>&lt;repo-root&gt;</code> with the path to your cloned repo.</p>
+      <div class="setup-steps">
+        <div class="setup-step">
+          <span class="step-num">1</span>
+          <div>
+            <strong>Open Terminal</strong> and run this (replace <code>&lt;repo-root&gt;</code>):
+            <div class="setup-cmd" id="setup-cmd">cd &lt;repo-root&gt; &amp;&amp; node honoka-bridge/index.js</div>
+            <button class="btn btn-sm" id="copy-cmd">Copy command</button>
+          </div>
+        </div>
+        <div class="setup-step">
+          <span class="step-num">2</span>
+          <div>
+            <strong>Done.</strong> Keep the terminal open. The dot above should turn green.
+            <button class="btn btn-sm btn-secondary" id="recheck-bridge" style="margin-top:8px">Check connection
+              now</button>
+          </div>
+        </div>
+      </div>
+      <div class="setup-footer">
+        <span class="setup-hint">For auto-start on login, run
+          <code>bash &lt;repo-root&gt;/honoka-bridge/install.sh</code> instead.</span>
+        <button class="btn btn-sm btn-secondary" id="close-setup">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+
+</html>

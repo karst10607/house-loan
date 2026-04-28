@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Honoka CSV Viewer</title>
+<script src="echarts.min.js"></script>
+<style>
+:root {
+  --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3a;
+  --text: #e0e0e8; --text-dim: #8888a0;
+  --accent: #6c8cff; --accent-dim: #4a6acc;
+  --green: #4ade80; --orange: #fb923c; --red: #f87171;
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 32px; border-bottom: 1px solid var(--border);
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+.badge { background: var(--accent); color: #fff; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.header-dim { font-size: 13px; color: var(--text-dim); }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+.hdr-btn {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background 0.15s;
+}
+.hdr-btn:hover { background: var(--border); }
+.hdr-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-dim { color: var(--text-dim); }
+
+/* Drop zone */
+.drop-zone {
+  margin: 40px auto; max-width: 600px; padding: 60px 40px;
+  border: 2px dashed var(--border); border-radius: 16px;
+  text-align: center; cursor: pointer; transition: all 0.2s;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent); background: rgba(108, 140, 255, 0.06);
+}
+.drop-zone h2 { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+.drop-zone p { font-size: 13px; color: var(--text-dim); }
+.drop-zone input[type="file"] { display: none; }
+
+/* Tabs */
+.tab-bar {
+  display: flex; align-items: center; gap: 8px; padding: 10px 32px;
+  border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.tab-bar .tab {
+  background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);
+  padding: 5px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.15s;
+}
+.tab-bar .tab:hover { color: var(--text); }
+.tab-bar .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tab-bar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.tab-bar .filename { font-size: 13px; color: var(--text-dim); margin-left: auto; }
+
+/* Content */
+.content { display: none; padding: 24px 32px; }
+.content.active { display: block; }
+
+/* Table with heatmap */
+.heatmap-wrap { overflow-x: auto; margin-bottom: 24px; }
+.heatmap-wrap table { border-collapse: collapse; font-size: 13px; width: 100%; }
+.heatmap-wrap th {
+  position: sticky; top: 0; background: var(--surface); color: var(--text-dim);
+  font-weight: 600; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border);
+  white-space: nowrap; cursor: pointer; user-select: none;
+}
+.heatmap-wrap th:hover { color: var(--text); }
+.heatmap-wrap td {
+  padding: 6px 12px; border-bottom: 1px solid var(--border);
+  white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums;
+}
+.heatmap-wrap td:first-child { text-align: left; font-weight: 500; color: var(--text); }
+.heatmap-wrap tr:hover td { filter: brightness(1.1); }
+
+/* Chart cards */
+.chart-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px 24px; margin-bottom: 20px;
+}
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.card-header h2 { font-size: 15px; font-weight: 600; }
+.chart-box { width: 100%; height: 420px; }
+.chart-controls { margin-top: 12px; font-size: 13px; color: var(--text-dim); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.chart-controls select, .chart-controls input {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  padding: 4px 8px; border-radius: 4px; font-size: 13px;
+}
+
+/* Multi-file tabs */
+.file-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.file-tab {
+  background: var(--surface); color: var(--text-dim); border: 1px solid var(--border);
+  padding: 3px 12px; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+.file-tab.active { background: var(--border); color: var(--text); }
+.file-tab .close { opacity: 0.5; cursor: pointer; font-size: 14px; }
+.file-tab .close:hover { opacity: 1; color: var(--red); }
+
+@media (max-width: 640px) {
+  header { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+  .content { padding: 12px; }
+  .tab-bar { padding: 8px 12px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>Honoka CSV Viewer</h1>
+    <span id="file-count" class="badge" style="display:none">0</span>
+    <span id="status-text" class="header-dim"></span>
+  </div>
+  <div class="header-actions">
+    <button class="hdr-btn" id="btn-add-more" style="display:none" title="Load another CSV">+ Add CSV</button>
+    <button class="hdr-btn btn-dim" id="btn-reset" style="display:none">Clear All</button>
+  </div>
+</header>
+
+<div id="landing" class="drop-zone">
+  <h2>Drop CSV file here</h2>
+  <p>or click to browse — supports multiple files</p>
+  <input type="file" id="file-input" accept=".csv,.tsv,.txt" multiple>
+</div>
+
+<div id="workspace" style="display:none">
+  <div class="tab-bar">
+    <div id="file-tabs" class="file-tabs"></div>
+    <div class="sep"></div>
+    <div id="view-tabs">
+      <button class="tab active" data-view="table">Table</button>
+      <button class="tab" data-view="bar">Bar Chart</button>
+      <button class="tab" data-view="line">Line Chart</button>
+      <button class="tab" data-view="stacked">Stacked Bar</button>
+    </div>
+  </div>
+  <div id="panels"></div>
+</div>
+
+<input type="file" id="add-file-input" accept=".csv,.tsv,.txt" multiple style="display:none">
+
+<script>
+const state = { files: [], activeFileIdx: 0, activeView: "table", charts: {} };
+
+// CSV parser — handles quoted fields, commas, tabs
+function parseCSV(text) {
+  const delim = text.indexOf("\t") !== -1 && text.split("\t").length > text.split(",").length ? "\t" : ",";
+  const lines = [];
+  let current = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { field += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === delim) { current.push(field.trim()); field = ""; }
+      else if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
+        current.push(field.trim()); field = "";
+        if (current.some(c => c !== "")) lines.push(current);
+        current = [];
+        if (ch === "\r") i++;
+      } else { field += ch; }
+    }
+  }
+  current.push(field.trim());
+  if (current.some(c => c !== "")) lines.push(current);
+  return lines;
+}
+
+function isDateLike(s) {
+  return /^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s);
+}
+
+function isNumeric(s) {
+  if (!s || s === "N/A" || s === "TBD" || s === "-" || s === "") return false;
+  const clean = s.replace(/%$/, "").replace(/,/g, "");
+  return !isNaN(parseFloat(clean)) && isFinite(clean);
+}
+
+function toNum(s) {
+  if (!s || s === "N/A" || s === "TBD" || s === "-") return null;
+  return parseFloat(s.replace(/%$/, "").replace(/,/g, ""));
+}
+
+function detectFormat(headers) {
+  const first = headers[0].toLowerCase();
+  const restDates = headers.slice(1).filter(h => isDateLike(h)).length;
+  const isFirstDate = first.includes("snapshot") || first.includes("date") || isDateLike(headers[0]);
+
+  if (isFirstDate) return "B";
+  if (restDates >= 2) return "A";
+  return "C";
+}
+
+// Percentile-based heatmap colors (matching the red/yellow/green from DX report)
+function computeColumnStats(rows, colIdx) {
+  const vals = rows.map(r => toNum(r[colIdx])).filter(v => v !== null).sort((a, b) => a - b);
+  if (vals.length === 0) return null;
+  const p25 = vals[Math.floor(vals.length * 0.25)];
+  const p75 = vals[Math.floor(vals.length * 0.75)];
+  return { p25, p75, min: vals[0], max: vals[vals.length - 1] };
+}
+
+function heatmapColor(val, stats) {
+  if (val === null || !stats) return "";
+  if (val <= stats.p25) return "background:rgba(239,68,68,0.25);color:#fca5a5";
+  if (val >= stats.p75) return "background:rgba(74,222,128,0.25);color:#86efac";
+  return "background:rgba(251,191,36,0.15);color:#fde68a";
+}
+
+function isProportionalData(headers, rows) {
+  const numericCols = headers.slice(1).filter((_, i) =>
+    rows.some(r => isNumeric(r[i + 1]))
+  );
+  if (numericCols.length < 2) return false;
+  let sumCount = 0;
+  for (const row of rows) {
+    const vals = headers.slice(1).map((_, i) => toNum(row[i + 1])).filter(v => v !== null);
+    if (vals.length >= 2) {
+      const pctVals = vals.filter(v => v >= 0 && v <= 100);
+      if (pctVals.length === vals.length) {
+        const sum = pctVals.reduce((a, b) => a + b, 0);
+        if (Math.abs(sum - 100) < 5) sumCount++;
+      }
+    }
+  }
+  return sumCount >= rows.length * 0.5;
+}
+
+// Render table with conditional coloring
+function renderTable(container, fileData) {
+  const { headers, rows, format } = fileData;
+  const colStats = {};
+  const numericColIndices = [];
+
+  for (let c = 1; c < headers.length; c++) {
+    if (rows.some(r => isNumeric(r[c]))) {
+      numericColIndices.push(c);
+      colStats[c] = computeColumnStats(rows, c);
+    }
+  }
+
+  let html = '<div class="heatmap-wrap"><table><thead><tr>';
+  headers.forEach(h => { html += `<th>${esc(h)}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  for (const row of rows) {
+    html += '<tr>';
+    row.forEach((cell, i) => {
+      if (i === 0) {
+        html += `<td>${esc(cell)}</td>`;
+      } else {
+        const val = toNum(cell);
+        const style = colStats[i] ? heatmapColor(val, colStats[i]) : "";
+        html += `<td style="${style}">${esc(cell)}</td>`;
+      }
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+// Render bar chart
+function renderBarChart(container, fileData) {
+  const { headers, rows, format } = fileData;
+  container.innerHTML = '<div class="chart-card"><div class="card-header"><h2>Bar Chart</h2></div><div id="bar-chart-box" class="chart-box"></div><div class="chart-controls"><label>Show: <select id="bar-series-select"></select></label></div></div>';
+
+  const chartEl = container.querySelector("#bar-chart-box");
+  const select = container.querySelector("#bar-series-select");
+
+  const numericCols = [];
+  for (let c = 1; c < headers.length; c++) {
+    if (rows.some(r => isNumeric(r[c]))) numericCols.push(c);
+  }
+
+  if (numericCols.length === 0) {
+    chartEl.innerHTML = '<p style="color:var(--text-dim);padding:40px;text-align:center">No numeric data found</p>';
+    return;
+  }
+
+  select.innerHTML = '<option value="all">All columns</option>';
+  numericCols.forEach(c => {
+    select.innerHTML += `<option value="${c}">${esc(headers[c])}</option>`;
+  });
+
+  const chart = echarts.init(chartEl, "dark");
+  disposeOnCleanup(fileData.id, "bar", chart);
+
+  function draw(selectedCol) {
+    const categories = rows.map(r => r[0]);
+    const cols = selectedCol === "all" ? numericCols : [parseInt(selectedCol)];
+    const series = cols.map(c => ({
+      name: headers[c],
+      type: "bar",
+      data: rows.map(r => toNum(r[c])),
+      itemStyle: { borderRadius: [3, 3, 0, 0] },
+    }));
+
+    chart.setOption({
+      backgroundColor: "transparent",
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      legend: cols.length > 1 ? { bottom: 0, textStyle: { color: "#8888a0", fontSize: 11 }, type: "scroll" } : undefined,
+      xAxis: { type: "category", data: categories, axisLabel: { rotate: categories.length > 8 ? 35 : 0, fontSize: 11, interval: 0 } },
+      yAxis: { type: "value" },
+      series,
+      grid: { left: 56, right: 24, bottom: cols.length > 1 ? 60 : 40, top: 24 },
+    }, true);
+  }
+
+  draw("all");
+  select.addEventListener("change", () => draw(select.value));
+  window.addEventListener("resize", () => chart.resize());
+}
+
+// Render line chart
+function renderLineChart(container, fileData) {
+  const { headers, rows, format } = fileData;
+  container.innerHTML = '<div class="chart-card"><div class="card-header"><h2>Trend Lines</h2></div><div id="line-chart-box" class="chart-box"></div><div class="chart-controls"><label>Highlight: <select id="line-highlight-select"></select></label></div></div>';
+
+  const chartEl = container.querySelector("#line-chart-box");
+  const select = container.querySelector("#line-highlight-select");
+
+  const numericCols = [];
+  for (let c = 1; c < headers.length; c++) {
+    if (rows.some(r => isNumeric(r[c]))) numericCols.push(c);
+  }
+
+  if (numericCols.length === 0) {
+    chartEl.innerHTML = '<p style="color:var(--text-dim);padding:40px;text-align:center">No numeric data found</p>';
+    return;
+  }
+
+  const chart = echarts.init(chartEl, "dark");
+  disposeOnCleanup(fileData.id, "line", chart);
+
+  if (format === "A") {
+    // entity_name as series, date columns as xAxis
+    const xLabels = numericCols.map(c => headers[c]);
+    select.innerHTML = '<option value="all">All entities</option>';
+    rows.forEach((r, i) => { select.innerHTML += `<option value="${i}">${esc(r[0])}</option>`; });
+
+    function draw(highlight) {
+      const series = rows.map((r, i) => ({
+        name: r[0],
+        type: "line",
+        data: numericCols.map(c => toNum(r[c])),
+        lineStyle: { width: highlight === "all" ? 2 : (highlight == i ? 3 : 1), opacity: highlight === "all" ? 0.8 : (highlight == i ? 1 : 0.2) },
+        emphasis: { focus: "series" },
+        symbolSize: highlight == i ? 8 : 4,
+      }));
+      chart.setOption({
+        backgroundColor: "transparent",
+        tooltip: { trigger: "axis" },
+        legend: { bottom: 0, textStyle: { color: "#8888a0", fontSize: 11 }, type: "scroll" },
+        xAxis: { type: "category", data: xLabels, axisLabel: { fontSize: 11 } },
+        yAxis: { type: "value" },
+        series,
+        grid: { left: 56, right: 24, bottom: 60, top: 24 },
+      }, true);
+    }
+    draw("all");
+    select.addEventListener("change", () => draw(select.value));
+  } else {
+    // Format B/C: first col as xAxis, each numeric col as a series
+    const xLabels = rows.map(r => r[0]);
+    select.innerHTML = '<option value="all">All metrics</option>';
+    numericCols.forEach(c => { select.innerHTML += `<option value="${c}">${esc(headers[c])}</option>`; });
+
+    function draw(selectedCol) {
+      const cols = selectedCol === "all" ? numericCols : [parseInt(selectedCol)];
+      const series = cols.map(c => ({
+        name: headers[c],
+        type: "line",
+        data: rows.map(r => toNum(r[c])),
+        symbolSize: 6,
+      }));
+      chart.setOption({
+        backgroundColor: "transparent",
+        tooltip: { trigger: "axis" },
+        legend: cols.length > 1 ? { bottom: 0, textStyle: { color: "#8888a0", fontSize: 11 }, type: "scroll" } : undefined,
+        xAxis: { type: "category", data: xLabels, axisLabel: { fontSize: 11 } },
+        yAxis: { type: "value" },
+        series,
+        grid: { left: 56, right: 24, bottom: cols.length > 1 ? 60 : 40, top: 24 },
+      }, true);
+    }
+    draw("all");
+    select.addEventListener("change", () => draw(select.value));
+  }
+
+  window.addEventListener("resize", () => chart.resize());
+}
+
+// Render 100% stacked bar chart
+function renderStackedBar(container, fileData) {
+  const { headers, rows, format } = fileData;
+  container.innerHTML = '<div class="chart-card"><div class="card-header"><h2>Stacked Bar Chart</h2></div><div id="stacked-chart-box" class="chart-box"></div></div>';
+
+  const chartEl = container.querySelector("#stacked-chart-box");
+
+  const numericCols = [];
+  for (let c = 1; c < headers.length; c++) {
+    if (rows.some(r => isNumeric(r[c]))) numericCols.push(c);
+  }
+
+  if (numericCols.length < 2) {
+    chartEl.innerHTML = '<p style="color:var(--text-dim);padding:40px;text-align:center">Need at least 2 numeric columns for stacked chart</p>';
+    return;
+  }
+
+  const chart = echarts.init(chartEl, "dark");
+  disposeOnCleanup(fileData.id, "stacked", chart);
+
+  const categories = rows.map(r => r[0]);
+  const proportional = isProportionalData(headers, rows);
+
+  const colors = ["#4285f4", "#ea4335", "#fbbc04", "#34a853", "#ff6d01", "#46bdc6", "#a78bfa", "#f472b6"];
+
+  const series = numericCols.map((c, i) => ({
+    name: headers[c],
+    type: "bar",
+    stack: "total",
+    emphasis: { focus: "series" },
+    data: rows.map(r => toNum(r[c])),
+    itemStyle: { color: colors[i % colors.length] },
+    label: {
+      show: rows.length <= 15 && numericCols.length <= 5,
+      position: "inside",
+      fontSize: 10,
+      color: "#fff",
+      formatter: p => p.value != null && p.value > 0 ? p.value : "",
+    },
+  }));
+
+  chart.setOption({
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    legend: { bottom: 0, textStyle: { color: "#8888a0", fontSize: 11 }, type: "scroll" },
+    xAxis: {
+      type: "category",
+      data: categories,
+      axisLabel: { rotate: categories.length > 8 ? 35 : 0, fontSize: 11, interval: 0 },
+    },
+    yAxis: { type: "value", max: proportional ? 100 : undefined, axisLabel: { formatter: proportional ? "{value}%" : "{value}" } },
+    series,
+    grid: { left: 56, right: 24, bottom: 60, top: 24 },
+  });
+
+  window.addEventListener("resize", () => chart.resize());
+}
+
+function disposeOnCleanup(fileId, viewKey, chart) {
+  const key = `${fileId}_${viewKey}`;
+  if (state.charts[key]) {
+    try { state.charts[key].dispose(); } catch {}
+  }
+  state.charts[key] = chart;
+}
+
+function esc(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+let fileIdCounter = 0;
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = e.target.result;
+    const parsed = parseCSV(text);
+    if (parsed.length < 2) return;
+
+    const headers = parsed[0];
+    const rows = parsed.slice(1).filter(r => r.length >= headers.length && r[0] !== "" && !r[0].startsWith("※") && !r[0].startsWith("Legend") && !r[0].startsWith("Bottom") && !r[0].startsWith("Middle") && !r[0].startsWith("Top") && !r[0].startsWith("Total"));
+
+    const format = detectFormat(headers);
+    const id = fileIdCounter++;
+    state.files.push({ id, name: file.name, headers, rows, format });
+
+    state.activeFileIdx = state.files.length - 1;
+    renderWorkspace();
+  };
+  reader.readAsText(file);
+}
+
+function renderWorkspace() {
+  document.getElementById("landing").style.display = "none";
+  document.getElementById("workspace").style.display = "block";
+  document.getElementById("btn-add-more").style.display = "";
+  document.getElementById("btn-reset").style.display = "";
+
+  const count = state.files.length;
+  const badge = document.getElementById("file-count");
+  badge.style.display = "";
+  badge.textContent = `${count} file${count > 1 ? "s" : ""}`;
+
+  // File tabs
+  const fileTabs = document.getElementById("file-tabs");
+  fileTabs.innerHTML = "";
+  state.files.forEach((f, i) => {
+    const tab = document.createElement("div");
+    tab.className = "file-tab" + (i === state.activeFileIdx ? " active" : "");
+    tab.innerHTML = `<span>${esc(f.name)}</span><span class="close" data-idx="${i}">&times;</span>`;
+    tab.addEventListener("click", (e) => {
+      if (e.target.classList.contains("close")) {
+        state.files.splice(parseInt(e.target.dataset.idx), 1);
+        if (state.files.length === 0) { resetAll(); return; }
+        state.activeFileIdx = Math.min(state.activeFileIdx, state.files.length - 1);
+        renderWorkspace();
+        return;
+      }
+      state.activeFileIdx = i;
+      renderWorkspace();
+    });
+    fileTabs.appendChild(tab);
+  });
+
+  renderActiveView();
+}
+
+function renderActiveView() {
+  const fileData = state.files[state.activeFileIdx];
+  if (!fileData) return;
+
+  const panels = document.getElementById("panels");
+  panels.innerHTML = '<div class="content active" id="active-panel"></div>';
+  const panel = document.getElementById("active-panel");
+
+  const view = state.activeView;
+  if (view === "table") renderTable(panel, fileData);
+  else if (view === "bar") renderBarChart(panel, fileData);
+  else if (view === "line") renderLineChart(panel, fileData);
+  else if (view === "stacked") renderStackedBar(panel, fileData);
+
+  document.getElementById("status-text").textContent =
+    `${fileData.rows.length} rows × ${fileData.headers.length} cols — Format ${fileData.format}`;
+}
+
+function resetAll() {
+  for (const c of Object.values(state.charts)) {
+    try { c.dispose(); } catch {}
+  }
+  state.charts = {};
+  state.files = [];
+  state.activeFileIdx = 0;
+  document.getElementById("workspace").style.display = "none";
+  document.getElementById("landing").style.display = "";
+  document.getElementById("btn-add-more").style.display = "none";
+  document.getElementById("btn-reset").style.display = "none";
+  document.getElementById("file-count").style.display = "none";
+  document.getElementById("status-text").textContent = "";
+}
+
+// Events
+const landing = document.getElementById("landing");
+const fileInput = document.getElementById("file-input");
+const addFileInput = document.getElementById("add-file-input");
+
+landing.addEventListener("click", () => fileInput.click());
+landing.addEventListener("dragover", (e) => { e.preventDefault(); landing.classList.add("drag-over"); });
+landing.addEventListener("dragleave", () => landing.classList.remove("drag-over"));
+landing.addEventListener("drop", (e) => {
+  e.preventDefault();
+  landing.classList.remove("drag-over");
+  for (const f of e.dataTransfer.files) { if (f.name.match(/\.(csv|tsv|txt)$/i)) loadFile(f); }
+});
+
+fileInput.addEventListener("change", () => {
+  for (const f of fileInput.files) loadFile(f);
+  fileInput.value = "";
+});
+
+document.getElementById("btn-add-more").addEventListener("click", () => addFileInput.click());
+addFileInput.addEventListener("change", () => {
+  for (const f of addFileInput.files) loadFile(f);
+  addFileInput.value = "";
+});
+
+document.getElementById("btn-reset").addEventListener("click", resetAll);
+
+document.querySelectorAll("#view-tabs .tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll("#view-tabs .tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    state.activeView = tab.dataset.view;
+    renderActiveView();
+  });
+});
+
+// Also support drag-drop on the whole page when files are loaded
+document.body.addEventListener("dragover", (e) => e.preventDefault());
+document.body.addEventListener("drop", (e) => {
+  e.preventDefault();
+  for (const f of e.dataTransfer.files) { if (f.name.match(/\.(csv|tsv|txt)$/i)) loadFile(f); }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "honoka-extension-builder",
+  "version": "1.0.9",
+  "scripts": {
+    "build": "esbuild src/content.js --bundle --outfile=dist/content.js --minify",
+    "watch": "esbuild src/content.js --bundle --outfile=dist/content.js --watch"
+  },
+  "dependencies": {
+    "js-tiktoken": "^1.0.14"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}

@@ -24,7 +24,6 @@
 > **開發者守則**：未通過上述測試的代碼嚴禁合併至生產分支。
 
 
-
 開發規劃
 
 Searched web: "notion api integration setup guide 2024 2025 2026"
@@ -77,3 +76,38 @@ Notion 的圖片上傳 API 分為兩階段：
 你可以先嘗試在 [Notion Developers](https://www.notion.so/my-integrations) 建立 Integration，並把產生的 **Secret** 與你的 **Database ID** 記下來（但先不要貼給我，我們會放在本地的 `.env` 檔案中）。
 
 **如果你對上述的映射邏輯（例如：有哪些欄位需要進 Notion Database）有特定想法，歡迎提出來討論！**
+
+---
+
+## 4. 模組化與移植協定 (Modular Integration Protocol)
+為了確保 Lite 版的功能未來能順利移植回公司主專案，開發時必須遵循以下規則：
+
+### A. 通訊埠與參數 API 化 (Port & Config Abstracting)
+- **禁止**：在代碼中直接寫死 `http://127.0.0.1:44123`。
+- **必須**：使用 `Config` 物件或環境變數管理 Bridge 通訊。
+  ```javascript
+  // 建議做法
+  const config = {
+    bridgePort: chrome.runtime.getManifest().name.includes('Lite') ? 44124 : 7749
+  };
+  ```
+
+### B. 功能資料夾化 (Feature Folder Isolation)
+- 所有新功能（如 Clipper, Telegram Bot）必須放置在獨立的資料夾中（例如 `src/features/clipper/`）。
+- 確保該資料夾與主程式的耦合度降到最低，僅透過單一入口 (Entry point) 進行掛載。
+
+### C. 儲存空間隔離 (Storage Stability)
+- Lite 版已綁定獨立的 **RSA Key**，其 Extension ID 已鎖定。
+- **禁止**：隨意更改 `manifest.json` 中的 `key` 欄位，否則會導致本地 Storage (History) 遺失。
+
+### D. 環境判定與版本號脫鉤 (Environment Detection Stability)
+- **原因 (Bug 記錄)**：過去我們曾使用 `version.includes('1.0.0')` 來判定是否為 Lite 版，導致版本號推進到 `1.0.2` 時判定失效，造成 Bridge Port 回退到公司版的 7749 而斷線。
+- **禁止**：在判定環境（Lite vs Prod）時，使用**寫死的精確版本號**（如 `"1.0.0"`），或依賴 `version` 字串。
+- **必須**：使用擴充功能名稱來判定環境，統一透過檢查 `manifest.name` 是否包含 "Lite"（如 `chrome.runtime.getManifest().name.includes('Lite')`），以確保未來發布 Patch 或升級 Major 版本時，環境判定不會意外中斷。
+
+### E. 依賴與運行環境完整性 (Dependency & Runtime Integrity)
+- **原因 (Bug 記錄)**：發生過將 Mac 開發環境的代碼移植到 Linux 時，因為漏掉了 `node_modules` 且未重新執行 `npm install`，導致 Bridge 找不到 `turndown` 而崩潰。
+- **必須**：
+  1. 在所有系統環境初次安裝後，務必確認已執行過 `npm install`。
+  2. 若要打包分發，應在安裝腳本 (`install-linux.sh`) 中加入 `npm install` 指令，確保使用者環境自動補齊。
+  3. **進階做法**：使用 `esbuild` 將後端打包成單一檔案 (Bundling)，將所有套件編譯進去，這樣分發時就不需要 `node_modules`。
