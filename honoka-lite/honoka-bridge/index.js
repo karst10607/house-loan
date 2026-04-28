@@ -1614,7 +1614,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.2.5";
+const BRIDGE_VERSION = "1.2.6";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
@@ -2240,21 +2240,28 @@ function initTelegramBot() {
   catch { console.error("  Telegram: node-telegram-bot-api not installed — run npm install"); return; }
 
   let axios, JSDOM, Readability, TurndownService;
-  try {
-    axios = require("axios");
-    ({ JSDOM } = require("jsdom"));
-    ({ Readability } = require("@mozilla/readability"));
-    TurndownService = require("turndown");
-  } catch (e) {
-    console.error("  Telegram: missing dependency —", e.message, "— run npm install");
-    return;
-  }
+  // Use a helper to load dependencies (handles potential ESM/CJS issues in Node 18)
+  const loadDeps = async () => {
+    try {
+      axios = require("axios");
+      const jsdom = await import("jsdom");
+      JSDOM = jsdom.JSDOM;
+      const readability = require("@mozilla/readability");
+      Readability = readability.Readability;
+      const turndown = require("turndown");
+      TurndownService = turndown;
+      return true;
+    } catch (e) {
+      console.error("  Telegram: dependency load failed —", e.message);
+      return false;
+    }
+  };
 
   const bot = new TelegramBot(token, {
     polling: {
-      interval: 1000,        // poll every 1s (not as aggressive)
+      interval: 1000,
       autoStart: true,
-      params: { timeout: 30 }, // long-poll 30s per request
+      params: { timeout: 30 },
     },
   });
   _telegramBot = bot;
@@ -2283,7 +2290,17 @@ function initTelegramBot() {
     try {
       const chatId = msg.chat.id;
       const fromId = String(msg.from?.id || "");
-      const allowedUser = getEffectiveSettings().telegramAllowedUser;
+      const settings = getEffectiveSettings();
+      const allowedUser = settings.telegramAllowedUser;
+
+      // Ensure dependencies are loaded (handles ESM/CJS compatibility in Node 18)
+      if (!JSDOM || !Readability || !TurndownService) {
+        const ok = await loadDeps();
+        if (!ok) {
+          await bot.sendMessage(chatId, "❌ System error: dependencies failed to load.");
+          return;
+        }
+      }
 
       // Security: ignore messages from non-authorised users if a restriction is set.
       if (allowedUser && fromId !== allowedUser) {
