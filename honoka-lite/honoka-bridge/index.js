@@ -1619,6 +1619,23 @@ const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
   const settings = getEffectiveSettings();
+  json(res, 200, {
+    ok: true,
+    version: BRIDGE_VERSION,
+    docsDir: DOCS_DIR,
+    editor: EDITOR,
+    port: PORT,
+    pid: process.pid,
+    startedAt,
+    nodeVersion: process.version,
+    integrations: {
+      telegram: !!settings.telegramBotToken,
+      slack:    !!settings.slackBotToken,
+    },
+  });
+}
+
+function handleDashboard(req, res) {
   const uptime = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
   const docCount = (() => {
     try {
@@ -1633,7 +1650,7 @@ function handleStatus(req, res) {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>Honoka Bridge Status</title>
+      <title>Honoka Bridge Dashboard</title>
       <style>
         body { font-family: system-ui, -apple-system, sans-serif; padding: 2rem; line-height: 1.5; max-width: 600px; margin: 0 auto; background: #f9fafb; }
         .card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; }
@@ -2441,6 +2458,7 @@ const server = http.createServer(async (req, res) => {
   const route = url.pathname;
 
   try {
+    if (route === "/" && req.method === "GET") return handleDashboard(req, res);
     if (route === "/status" && req.method === "GET") return handleStatus(req, res);
     if (route === "/shutdown" && req.method === "GET") return handleShutdown(req, res);
     if (route === "/list" && req.method === "GET") return handleList(req, res);
