@@ -10,6 +10,7 @@ const PORT = parseInt(process.env.HONOKA_PORT || "44124", 10);
 const DOCS_DIR = process.env.HONOKA_DOCS_DIR
   ? path.resolve(process.env.HONOKA_DOCS_DIR)
   : path.join(require("os").homedir(), "honoka-docs");
+const INBOX_DIR = path.join(require("os").homedir(), "honoka-inbox");
 const EDITOR = process.env.HONOKA_EDITOR || "cursor";
 
 // Resolve editor binary — Launch Agents have a minimal PATH that
@@ -40,6 +41,7 @@ const REGISTRY_FILE = path.join(REGISTRY_DIR, "registry.json");
 const HISTORY_FILE = path.join(REGISTRY_DIR, "history.v1.jsonl");
 
 fs.mkdirSync(DOCS_DIR, { recursive: true });
+fs.mkdirSync(INBOX_DIR, { recursive: true });
 fs.mkdirSync(REGISTRY_DIR, { recursive: true });
 
 function readRegistry() {
@@ -63,21 +65,21 @@ function slugify(title) {
 
 // Resolve folder name for a Notion page save.
 // Reuses existing folder if pageId is already in registry.
-function resolveFolder(pageId, title, url) {
+function resolveFolder(pageId, title, url, baseDir = DOCS_DIR) {
   const reg = readRegistry();
   // If this page was saved before, reuse its folder
   if (pageId && reg[pageId]) return reg[pageId].folder;
 
   // Try the title first (preserve case, just sanitize for filesystem)
   const clean = sanitizeFolderName(title || "");
-  if (clean) return dedup(clean);
+  if (clean) return dedup(clean, baseDir);
 
   // Try extracting a readable name from the Notion URL slug
   if (url) {
     const urlMatch = url.match(/notion\.so\/(?:[^/]+\/)?([A-Za-z][\w-]+)-[a-f0-9]{32}/);
     if (urlMatch) {
       const fromUrl = urlMatch[1].replace(/-/g, " ");
-      return dedup(sanitizeFolderName(fromUrl) || `page-${pageId?.substring(0, 12) || Date.now().toString(36)}`);
+      return dedup(sanitizeFolderName(fromUrl) || `page-${pageId?.substring(0, 12) || Date.now().toString(36)}`, baseDir);
     }
   }
 
@@ -97,10 +99,10 @@ function sanitizeFolderName(name) {
 }
 
 // If folder already exists on disk, append a suffix
-function dedup(name) {
+function dedup(name, baseDir) {
   let candidate = name;
   let i = 2;
-  while (fs.existsSync(path.join(DOCS_DIR, candidate))) {
+  while (fs.existsSync(path.join(baseDir, candidate))) {
     candidate = `${name} (${i++})`;
   }
   return candidate;
@@ -171,8 +173,11 @@ async function handleSave(req, res) {
 
   if (!title && !pageId) return json(res, 400, { error: "title or pageId required" });
 
-  const slug = resolveFolder(pageId, title, url);
-  const docDir = path.join(DOCS_DIR, slug);
+  const source = body.source || (pageId ? "notion" : "clip");
+  const baseDir = (source === "clip") ? INBOX_DIR : DOCS_DIR;
+  
+  const slug = resolveFolder(pageId, title, url, baseDir);
+  const docDir = path.join(baseDir, slug);
   const imgDir = path.join(docDir, "images");
   fs.mkdirSync(imgDir, { recursive: true });
 
@@ -241,7 +246,7 @@ async function handleSave(req, res) {
     const fm = [
       "---",
       `title: "${bestTitle.replace(/"/g, '\\"')}"`,
-      `source: notion`,
+      `source: ${source}`,
       `category: ${category}`,
       pageId ? `page_id: "${pageId}"` : null,
       url ? `notion_url: "${url}"` : null,
@@ -345,9 +350,10 @@ async function handleOpen(req, res) {
   const body = await readBody(req);
   const { folder, file } = body;
 
+  const baseDir = (folder && fs.existsSync(path.join(INBOX_DIR, folder))) ? INBOX_DIR : DOCS_DIR;
   const target = folder
-    ? (file ? path.join(DOCS_DIR, folder, file) : path.join(DOCS_DIR, folder))
-    : DOCS_DIR;
+    ? (file ? path.join(baseDir, folder, file) : path.join(baseDir, folder))
+    : baseDir;
 
   const editorBin = resolveEditor(body.editor || EDITOR);
   try {
@@ -368,7 +374,8 @@ async function handleDelete(req, res) {
     return json(res, 400, { error: "invalid folder name" });
   }
 
-  const docDir = path.join(DOCS_DIR, folder);
+  const baseDir = (folder && fs.existsSync(path.join(INBOX_DIR, folder))) ? INBOX_DIR : DOCS_DIR;
+  const docDir = path.join(baseDir, folder);
   if (!fs.existsSync(docDir)) return json(res, 404, { error: "folder not found" });
 
   // Remove folder and contents
@@ -492,60 +499,69 @@ async function handleTemplatesDelete(req, res) {
   json(res, 200, { ok: true, folder });
 }
 
+function scanDirectory(baseDir, reg, results) {
+  if (!fs.existsSync(baseDir)) return;
+  const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    const indexPath = path.join(baseDir, entry.name, "index.md");
+    if (!fs.existsSync(indexPath)) continue;
+
+    const stat = fs.statSync(indexPath);
+    const content = fs.readFileSync(indexPath, "utf8");
+    const titleMatch = content.match(/^title:\s*"?(.+?)"?\s*$/m);
+    const regEntry = Object.values(reg).find((r) => r.folder === entry.name);
+
+    const imgDir = path.join(baseDir, entry.name, "images");
+    let imageCount = 0;
+    try { imageCount = fs.readdirSync(imgDir).length; } catch { }
+    const rawMermaid = (content.match(/```mermaid/g) || []).length;
+    const renderedMermaid = new Set((content.match(/#mermaid-[a-f0-9-]+/g) || [])).size;
+    const mermaidCount = rawMermaid + renderedMermaid;
+
+    const rawPlantUML = (content.match(/```plantuml|@startuml|@startmindmap|@startgantt|@startsalt|@startwbs/g) || []).length;
+    const drawioXml = (content.match(/mxGraphModel/g) || []).length;
+    const drawioImg = (content.match(/!\[.*?(drawio|diagrams\.net).*?\]/gi) || []).length;
+    const drawioCount = drawioXml || drawioImg;
+
+    const categoryMatch = content.match(/^category:\s*(.+?)\s*$/m);
+    const category = categoryMatch ? categoryMatch[1] : regEntry?.category || "reference";
+    const sourceMatch = content.match(/^source:\s*(.+?)\s*$/m);
+
+    results.push({
+      folder: entry.name,
+      baseDir: baseDir === INBOX_DIR ? "inbox" : "docs",
+      title: titleMatch ? titleMatch[1] : regEntry?.title || entry.name,
+      category,
+      source: sourceMatch ? sourceMatch[1] : (regEntry?.notionUrl ? "notion" : "clip"),
+      pageId: Object.keys(reg).find((k) => reg[k].folder === entry.name) || null,
+      notionUrl: regEntry?.notionUrl || null,
+      savedAt: regEntry?.savedAt || stat.birthtime.toISOString(),
+      lastModified: stat.mtime.toISOString(),
+      sizeBytes: stat.size,
+      imageCount,
+      mermaidCount,
+      plantumlCount: rawPlantUML,
+      drawioCount,
+      isTemplate: !!regEntry?.isTemplate,
+      templateLabel: regEntry?.templateLabel || null,
+    });
+  }
+}
+
 function handleList(req, res) {
   const reg = readRegistry();
   const docs = [];
 
   try {
-    const entries = fs.readdirSync(DOCS_DIR, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-      const indexPath = path.join(DOCS_DIR, entry.name, "index.md");
-      if (!fs.existsSync(indexPath)) continue;
-
-      const stat = fs.statSync(indexPath);
-      const content = fs.readFileSync(indexPath, "utf8");
-      const titleMatch = content.match(/^title:\s*"?(.+?)"?\s*$/m);
-      const regEntry = Object.values(reg).find((r) => r.folder === entry.name);
-
-      const imgDir = path.join(DOCS_DIR, entry.name, "images");
-      let imageCount = 0;
-      try { imageCount = fs.readdirSync(imgDir).length; } catch { }
-      const rawMermaid = (content.match(/```mermaid/g) || []).length;
-      const renderedMermaid = new Set((content.match(/#mermaid-[a-f0-9-]+/g) || [])).size;
-      const mermaidCount = rawMermaid + renderedMermaid;
-
-      const rawPlantUML = (content.match(/```plantuml|@startuml|@startmindmap|@startgantt|@startsalt|@startwbs/g) || []).length;
-      const drawioXml = (content.match(/mxGraphModel/g) || []).length;
-      const drawioImg = (content.match(/!\[.*?(drawio|diagrams\.net).*?\]/gi) || []).length;
-      const drawioCount = drawioXml || drawioImg;
-
-      const categoryMatch = content.match(/^category:\s*(.+?)\s*$/m);
-      const category = categoryMatch ? categoryMatch[1] : regEntry?.category || "reference";
-
-      docs.push({
-        folder: entry.name,
-        title: titleMatch ? titleMatch[1] : regEntry?.title || entry.name,
-        category,
-        pageId: Object.keys(reg).find((k) => reg[k].folder === entry.name) || null,
-        notionUrl: regEntry?.notionUrl || null,
-        savedAt: regEntry?.savedAt || stat.birthtime.toISOString(),
-        lastModified: stat.mtime.toISOString(),
-        sizeBytes: stat.size,
-        imageCount,
-        mermaidCount,
-        plantumlCount: rawPlantUML,
-        drawioCount,
-        isTemplate: !!regEntry?.isTemplate,
-        templateLabel: regEntry?.templateLabel || null,
-      });
-    }
+    scanDirectory(DOCS_DIR, reg, docs);
+    scanDirectory(INBOX_DIR, reg, docs);
   } catch (err) {
     return json(res, 500, { error: err.message });
   }
 
   docs.sort((a, b) => b.lastModified.localeCompare(a.lastModified));
-  json(res, 200, { docs, docsDir: DOCS_DIR, count: docs.length });
+  json(res, 200, { docs, docsDir: DOCS_DIR, inboxDir: INBOX_DIR, count: docs.length });
 }
 
 function handlePreview(req, res) {
@@ -555,7 +571,8 @@ function handlePreview(req, res) {
     return json(res, 400, { error: "invalid folder" });
   }
 
-  const indexPath = path.join(DOCS_DIR, folder, "index.md");
+  const baseDir = (folder && fs.existsSync(path.join(INBOX_DIR, folder))) ? INBOX_DIR : DOCS_DIR;
+  const indexPath = path.join(baseDir, folder, "index.md");
   if (!fs.existsSync(indexPath)) return json(res, 404, { error: "not found" });
 
   const raw = fs.readFileSync(indexPath, "utf8");

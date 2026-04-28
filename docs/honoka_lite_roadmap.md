@@ -91,9 +91,16 @@ graph TD
 *   [ ] 完善 `house-loan-clipper`，實作 Readability + Turndown 轉換並打 API 給 Bridge。
 
 ### Phase 2: 跨平台輸入 (Telegram Bot 整合)
-*   [ ] 申請 Telegram Bot Token。
-*   [ ] 於 `honoka-bridge` 內整合 `node-telegram-bot-api`。
-*   [ ] 實作網址解析爬蟲，讓 Bot 收到連結能自動轉交給 Phase 1 的處理管線。
+*    - [x] **目錄分流 (Inbox vs Docs)**: 修復 Clipper 與 Notion 文件混雜問題。現在 Clip 預設進入 `~/honoka-inbox/`。
+    - [ ] **Notion Source Link Fix**: 修正 Library 點擊跳轉至原始網頁而非 Notion 頁面的問題。
+    - [ ] **推回 Notion 研究**:
+        - 研究 P2P (Pear) Hyperdrive 方案解決圖片傳輸。
+        - 評估 Placeholder 方案：讓使用者手動拖拉圖片補回 Notion。
+    - [ ] **Telegram Bot Integration**:
+        - 使用 Node.js 直接抓取網址內容。
+        - 整合 `@mozilla/readability` 進行主文分析。
+        - 支援「雙存檔模式」：保存 `source.html` (原始樣式) 與 `index.md` (Vector DB/LLM 友善格式)。
+    - [x] **穩定化工程**: 修復 Clipper 在 Popup 關閉時斷線的問題 (v1.1.0)。
 
 ### Phase 3: 知識向量化 (Local Vector DB 建置)
 *   [ ] 選擇與安裝本地向量引擎（建議直接在 Node 專案中 `npm install @lancedb/lancedb`，不需額外架設伺服器）。

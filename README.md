@@ -57,6 +57,10 @@
 
 ## 更新紀錄 (Change Log)
 
+### v1.1.1 (2026-04-28) — 存儲優化：收件匣 (Inbox) 分流
+- **實作目錄分流**：Clipper 抓取的資料現在會預設存入 `~/honoka-inbox/`，而從 Notion 同步的文件保留在 `~/honoka-docs/`。這能保持文件庫的純淨，將未整理的素材隔離。
+- **Bridge 智慧路徑**：Bridge 現在會自動掃描兩個目錄，讓你在同一個界面管理「正式文件」與「待處理素材」。
+
 ### v1.1.0 (2026-04-28) — 架構重構：Clipper 終於能存了！
 - **根治 Clipper 完全無法存檔的根本原因**：發現 Chrome Extension 的 popup 視窗在使用者點擊網頁去選取區塊的瞬間會被系統強制關閉，導致 popup 中的 polling 計時器直接消失，選完的內容永遠沒有人接收。
 - **解決方案**：將 Clipper 的核心邏輯（注入選取器、輪詢結果、傳送至 Bridge）全部搬進 `background.js` (Service Worker)。Service Worker 不會因為 popup 關閉而被終止，確保整個剪輯流程從頭到尾都能完成。

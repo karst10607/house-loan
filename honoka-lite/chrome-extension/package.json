@@ -1,6 +1,6 @@
 {
   "name": "honoka-extension-builder",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "scripts": {
     "build": "esbuild src/content.js --bundle --outfile=dist/content.js --minify",
     "watch": "esbuild src/content.js --bundle --outfile=dist/content.js --watch"
