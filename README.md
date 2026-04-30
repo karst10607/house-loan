@@ -20,6 +20,69 @@
 
 ---
 
+## 系統架構 (System Architecture)
+
+Honoka 是一個整合了多端輸入與自動化處理的知識管理系統，其核心運作流程如下：
+
+```mermaid
+graph TD
+    %% Input Sources
+    subgraph Input_Sources [輸入端]
+        Extension[Chrome Extension / Clipper] -- "HTTP API (/save)" --> Bridge_API
+        TG_User((Telegram 使用者)) -- "傳送 URL" --> TG_Bot[Telegram Bot Service]
+    end
+
+    %% Backend Service (honoka-bridge)
+    subgraph Honoka_Bridge [核心後端: honoka-bridge]
+        Bridge_API[Node.js HTTP Server]
+        
+        subgraph Logic_Modules [邏輯處理層]
+            TG_Bot --> TG_Handler[telegram.js: 訊息解析]
+            TG_Handler -- "一般網頁" --> Readability[Readability: 內容提取]
+            TG_Handler -- "影片" --> YTDLP[downloader.js: yt-dlp]
+            
+            Bridge_API --> Capture[index.js: Playwright Capture]
+            Capture -- "特殊規則" --> SITE_RULES[Site Rules: 591/永慶/...]
+        end
+
+        subgraph Storage_Engine [儲存引擎: storage.js]
+            MD_Gen[Markdown Generator]
+            FM_Prep[Frontmatter Prepend]
+            Img_Mgr[Image Manager: 下載與重新命名]
+            
+            MD_Gen --> FM_Prep
+            FM_Prep --> saveToDisk
+        end
+
+        %% Data Flow inside Bridge
+        Readability --> MD_Gen
+        SITE_RULES --> FM_Prep
+        YTDLP --> saveToDisk
+    end
+
+    %% Data Layer
+    subgraph Data_Layer [資料層: 本地檔案系統]
+        saveToDisk --> Registry[(registry.json: 索引)]
+        saveToDisk --> Docs_Folder["~/honoka-docs/ (成品存檔)"]
+        saveToDisk --> Inbox_Folder["~/honoka-inbox/ (待處理收件匣)"]
+    end
+
+    %% UI & Visualization
+    subgraph Output_UI [展示端]
+        Registry --> Dashboard[Honoka Dashboard: 本地管理介面]
+        Registry --> Charts[honoka-charts: 房價數據分析]
+        Docs_Folder --> Obsidian_Notion[Obsidian / Notion / RAG 系統]
+    end
+
+    %% Styling
+    style Honoka_Bridge fill:#f5f5f5,stroke:#333,stroke-width:2px
+    style Data_Layer fill:#e1f5fe,stroke:#01579b
+    style Input_Sources fill:#fff9c4,stroke:#fbc02d
+    style Output_UI fill:#e8f5e9,stroke:#2e7d32
+```
+
+---
+
 ## 快速開始 (Honoka Lite)
 
 ### Linux 環境
