@@ -315,3 +315,7 @@ button:hover {
 .clip-btn:hover {
   background: #24b09e;
 }
+
+#download-video:hover {
+  background: #2563eb !important;
+}

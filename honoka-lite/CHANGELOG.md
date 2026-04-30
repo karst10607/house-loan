@@ -1,5 +1,38 @@
 # Honoka Lite Changelog
 
+## v1.4.1
+
+### Fixes
+- **X/Twitter Archival**: Enabled automatic Chrome cookies synchronization for `yt-dlp`. This allows archiving of age-restricted or sensitive content that previously failed with "No video found".
+
+## v1.4.0
+
+### New Features
+- **Dashboard Video Downloader**: Added a universal video download interface to the Bridge home page. http://127.0.0.1:44124 
+- **Chrome Extension Video Tab**: Integrated video download button directly into the browser extension popup.
+- **Live Progress Tracking**: Real-time download percentage updates on the dashboard.
+
+### Improvements
+- **Process Stability**: Disabled internal cluster manager to favor systemd service management.
+- **Bug Fixes**: Resolved silent failures in Telegram progress updates by removing sensitive Markdown formatting.
+
+## v1.3.8
+
+### Fixes
+- **Telegram Stability**: Removed Markdown formatting from progress updates to prevent parsing errors with complex URLs/titles.
+- **Debugging**: Added detailed console logging for video download progress.
+
+## v1.3.7
+
+### Fixes
+- **Improved Progress Parsing**: Broadened regex to support more `yt-dlp` output formats.
+- **Environment**: Updated `yt-dlp` to latest version (2026.03.17) to fix YouTube/X download issues.
+
+## v1.3.6
+
+### Fixes
+- **Regex Update**: Initial attempt at broadening progress bar matching.
+
 ## v1.3.5
 
 ### Features

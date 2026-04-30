@@ -64,37 +64,68 @@ To ensure fairness when the Host (Room Owner) triggers AI actions, Honoka implem
 - **Anonymous Mode**: Users can toggle "Incognito" for sensitive feedback.
 
 ### B. Hashing for Anonymity & Integrity
-To protect user privacy while preventing "Sybil attacks" (duplicate voting), Honoka uses a client-side hashing mechanism:
+To protect user privacy while preventing "Sybil attacks" (duplicate voting), Honoka uses a client-side hashing mechanism. Even if the Chrome Extension ID is locked (identical for all users), unique identity is maintained:
 
 ```mermaid
 graph TD
-    subgraph Client_Side [Guest Browser]
-        U[Enter Name: Alice] --> T{Anonymous?}
-        T -- Yes --> H["Hash: SHA256(Name + Session_Salt)"]
-        H --> SID[ID: '8f3a...']
-        T -- No --> SID[ID: 'Alice']
+    subgraph Client_Side [Guest Extension]
+        Seed[Generate Local_Device_Seed] --> ID[Voter_ID: SHA256(Seed + Slug)]
+        ID --> SSO[Silent SSO via mDNS]
     end
 
-    subgraph Honoka_Bridge [Host Machine]
-        SID --> L[collaboration-log.json]
-        L --> V[Vote Count / Consensus Check]
+    subgraph Honoka_Governance [Host Bridge / LAN]
+        SSO --> Honne[Honne: Internal Discussion]
+        Honne --> Vote{Consensus?}
+        Vote -- No --> Honne
+        Vote -- Yes --> Clerk[AI Clerk: Summarize]
+    end
+
+    subgraph Mirror_Layers [Public Sync]
+        Clerk --> Notion[Notion: Tatemae]
+        Clerk --> GitHub[GitHub: Final PR]
     end
 ```
 
-- **Irreversibility**: The Host sees `8f3a...` but cannot mathematically reverse it to "Alice".
-- **Integrity**: Each session produces a consistent hash, ensuring one person gets exactly one vote even when anonymous.
+1.  **Local Device Seed**: On first run, the extension generates a random `local_device_seed` stored in `chrome.storage.local`.
+2.  **Voter ID Generation**:
+    *   `Voter_ID = SHA256(local_device_seed + Article_Slug + System_Salt)`
+3.  **Anonymity**: The Host sees `8f3a...` but cannot mathematically reverse it to the actual user or device.
+4.  **Integrity**: Each device produces a consistent hash for a specific article, ensuring "one device, one vote".
 
-### C. Consensus Gates
+### C. The "Honne (本音) & Tatemae (建前)" Bridge
+Honoka distinguishes between internal "raw" discussion and public "consensus" content:
+
+- **Honne (Internal)**: High-fidelity, sensitive discussions, and security reviews. These are stored in local `.honne.md` or `discussion.jsonl` files within the Leaf Bundle. They are **never** synced to Notion.
+- **Tatemae (Public)**: The polished, agreed-upon documentation synced to Notion. The AI acts as a "Clerk," summarizing the Honne discussions into a professional Tatemae format once consensus is reached.
+
+### D. Consensus Gates
 - **Vote to Refactor**: AI refactoring (e.g., in Cursor) is only "unlocked" after key comments reach a consensus threshold (e.g., 50% approval).
 - **Final Sign-off**: A summary of agreed changes must be digitally "initialed" by participants on the Honoka Web UI before the Host can push the final version to GitHub.
 
-### D. Audit Trail
+### E. Audit Trail
 - **Transparency**: Every comment, vote, and sign-off is saved in a local `collaboration-log.json`.
 - **Accountability**: This log can be optionally included in the GitHub PR to prove the AI's changes reflect the team's shared intent, not just the Host's preference.
 
-## 7. Action Items
-- [ ] Implement `sanitizeContent()` utility in `honoka-bridge/index.js`.
-- [ ] Add `hierarchy` and `status` fields to `registry.json`.
-- [ ] Create a UI view for "Staging" and "Token Usage".
-- [ ] Develop the "Anonymous Voting" (SHA-256) and "Sign-off" UI components.
-- [ ] Define the CLI handoff interface for colleagues' tools.
+## 7. Forum Architecture: The Collaborative Space
+
+To provide a premium review experience (the "Wow" factor), Honoka utilizes a modern forum interface as the governance layer.
+
+### A. Design Choice: Flarum vs. Custom
+- **Flarum (Recommended)**: A high-performance, SPA-based forum that provides a "Social Wall" feel.
+    - **Pros**: Native support for polls, mentions, and a "Discussion-first" layout.
+    - **Integration**: The `honoka-bridge` pushes new clips as "Discussions" via API.
+- **Local Forum (honoka-lite UI)**: A lightweight glassmorphic dashboard for quick voting and review.
+
+### B. LAN-First & Silent SSO
+- **Discovery**: Host uses `mDNS` (Bonjour) to broadcast `honoka-master.local` on the LAN.
+- **Silent SSO**: Users with the Honoka Extension are automatically logged into the Forum using their `Voter_ID` hash. No manual registration is required.
+- **Physical Security**: The internal discussion (Honne) is only accessible when physically connected to the Host's network, creating a natural security perimeter.
+
+## 8. Action Items
+- [ ] Implement `mDNS` discovery in `honoka-bridge/index.js`.
+- [ ] Add `local_device_seed` generation to the Chrome Extension.
+- [ ] Create `.honne` file handling to prevent syncing private discussions to Notion.
+- [ ] Implement `POST /api/internal/vote` for anonymous LAN voting.
+- [ ] Setup a Docker-based Flarum template for team "Governance Hub" deployment.
+- [ ] Develop the AI "Clerk" logic to summarize `honne.jsonl` into `index.md`.
+

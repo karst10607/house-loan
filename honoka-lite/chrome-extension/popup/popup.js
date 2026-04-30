@@ -235,4 +235,53 @@ chrome.runtime.onMessage.addListener((msg) => {
     }
   }
 });
+// ── Video Downloader Logic ──
 
+async function checkVideoSite() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const url = tab?.url || "";
+  const infoEl = document.getElementById("video-info");
+  const btn = document.getElementById("download-video");
+
+  const isVideo = /x\.com|twitter\.com|youtube\.com|youtu\.be|bilibili\.com|vimeo\.com/i.test(url);
+  
+  if (isVideo) {
+    infoEl.textContent = `✅ Ready to download from: ${new URL(url).hostname}`;
+    btn.disabled = false;
+    btn.style.opacity = "1";
+  } else {
+    infoEl.textContent = "❌ No video site detected on this tab.";
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
+  }
+}
+
+document.getElementById("download-video").addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const statusEl = document.getElementById("video-status");
+  
+  statusEl.textContent = "🚀 Starting download on Bridge...";
+  statusEl.style.color = "#3b82f6";
+
+  try {
+    const res = await fetch("http://127.0.0.1:44124/api/video/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: tab.url })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      statusEl.textContent = "✅ Download triggered! Check Inbound_Videos folder.";
+      statusEl.style.color = "#2dd4bf";
+    } else {
+      statusEl.textContent = "❌ Bridge Error: " + data.error;
+      statusEl.style.color = "#f87171";
+    }
+  } catch (e) {
+    statusEl.textContent = "❌ Failed to connect to Bridge (127.0.0.1:44124)";
+    statusEl.style.color = "#f87171";
+  }
+});
+
+// Run check on load
+checkVideoSite();

@@ -1,19 +1,19 @@
 # 房貸助手 (House Loan Helper)：去中心化知識架構 Roadmap
 
-本專案旨在打造一個「本地優先 (Local-First)」、「雲端同步 (Notion Mirror)」且具備「P2P 社交屬性 (Pear Distribution)」的現代化知識管理生態。
+本專案旨在打造一個「本地優先 (Local-First)」、「雲端同步 (Notion Mirror)」的現代化知識管理生態。
+
+
+先檢查一下為什麼bridge 的nodejs server一直死
+正確的更新後重起方案到底順序是什麼
+
+
+
 
 ---
 
-## 🌟 核心架構願景：雙三層共存 (Triple-Layer Architecture)
-
-我們不只做剪貼工具，而是要解決「資料主權」與「協作便利」的矛盾：
-1.  **資料主權層 (Local Core)**：以「葉子束 (Leaf Bundle)」規範存儲的本地 Markdown 與 Assets 檔案。這是唯一的 Single Source of Truth。
-2.  **雲端鏡像層 (Notion Mirror)**：將本地內容異步同步至 Notion，提供強大的 UI、跨裝置瀏覽與團隊協作能力。
-3.  **分散式社交層 (P2P Social)**：利用 Pear (Hyperstack) 將存剪內容轉化為 P2P 訊息流，實現如同 Twitter 般的去中心化追蹤與互動。
-
 ---
 
-以下都不做
+以下都不做，這都是一堆亂七八糟的白日夢
 我們只做本地優先，
 1. Notion 不用了 轉到 dropbox 或其他方案
 2. 不用社交功能
@@ -35,8 +35,16 @@
 
 ### 🔗 Phase 2：擴充功能整合與雙向同步
 管理多個入口，統一知識輸入路徑。
-- [ ] **Notion 提取器整合**：整合現有的「Notion 文章提取 Chrome Extension」，讓存儲在 Notion 的內容也能反向同步回本地做備份。
+- [/] **Notion 提取器整合**：整合現有的「Notion 文章提取 Chrome Extension」，讓存儲在 Notion 的內容也能反向同步回本地做備份。(正在優化中)
 - [ ] **雙向同步機制**：確保本地修改與 Notion 修改能保持最終一致性。
+
+### 🛡️ Phase 2.5：協作治理與脫敏同步
+將 Honoka 提升為「Notion 到 GitHub」的企業級安全橋樑。
+- [ ] **脫敏清洗層 (Sanitization Layer)**：自動過濾敏感資訊，確保代碼/文件推送到 GitHub 前的安全。
+- [ ] **共識協議 (Consensus Protocol)**：基於 SHA-256 的匿名留言與投票系統，確保團隊同意後才執行 AI 補丁。
+- [ ] **Preview 渲染引擎升級**：支援 Mermaid 自動渲染與程式碼高亮 (Prism.js)。
+- [ ] **GitHub CLI 對接**：與現有批次推送工具整合，實現自動化 PR 提交。
+
 
 ### 📡 Phase 3：P2P 社交層與分散式分發
 將個人筆記轉化為社交貨幣。

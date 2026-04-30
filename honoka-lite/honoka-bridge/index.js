@@ -23,10 +23,12 @@ if (cluster.isPrimary || cluster.isMaster) {
 require('dns').setDefaultResultOrder('ipv4first');
 
 const http = require("http");
+const https = require("https");
+http.globalAgent.family = 4;
+https.globalAgent.family = 4;
 const fs = require("fs");
 const path = require("path");
 const { execFile, exec } = require("child_process");
-const https = require("https");
 const { spawn } = require("child_process");
 
 const PORT = parseInt(process.env.HONOKA_PORT || "44124", 10);
@@ -1615,7 +1617,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.3.5";
+const BRIDGE_VERSION = "1.4.1";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
@@ -1635,6 +1637,9 @@ function handleStatus(req, res) {
     },
   });
 }
+
+// ── Global State for Downloads ──
+const activeDownloads = new Map();
 
 async function handleRoot(req, res) {
   const uptime = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
@@ -1661,52 +1666,82 @@ async function handleRoot(req, res) {
         .status-tag { background: #dcfce7; color: var(--success); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
         .detail { margin: 0.5rem 0; color: #4b5563; font-size: 0.9rem; }
         code { background: #f3f4f6; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
-        .cap-item { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #f3f4f6; }
-        .cap-label { font-weight: 500; font-size: 0.875rem; }
-        .cap-value { font-size: 0.75rem; color: #666; }
-        .badge { padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; font-size: 0.7rem; }
-        .badge-ok { background: #dcfce7; color: var(--success); }
-        .badge-missing { background: #fee2e2; color: var(--danger); }
-        .actions { margin-top: 1.5rem; border-top: 1px solid #f3f4f6; padding-top: 1rem; }
-        .btn-shutdown { 
-          display: inline-block; padding: 0.5rem 1rem; background: #fee2e2; color: var(--danger); 
-          text-decoration: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500;
-          border: 1px solid #fecaca; cursor: pointer; transition: all 0.2s;
-        }
-        .btn-shutdown:hover { background: #fecaca; }
-        .guide-link { font-size: 0.75rem; color: var(--primary); text-decoration: none; margin-left: 0.5rem; }
+        .input-group { display: flex; gap: 0.5rem; margin-top: 1rem; }
+        input[type="text"] { flex: 1; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; }
+        button { background: var(--primary); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500; }
+        button:hover { opacity: 0.9; }
+        .progress-item { font-size: 0.8rem; background: #f3f4f6; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; display: flex; justify-content: space-between; }
       </style>
     </head>
     <body>
       <div class="card">
-        <h1>Honoka Bridge <span class="status-tag">ACTIVE</span></h1>
-        <div class="detail"><b>Version:</b> ${BRIDGE_VERSION}</div>
-        <div class="detail"><b>Port:</b> ${PORT}</div>
-        <div class="detail"><b>Docs:</b> <code>${DOCS_DIR.replace(require("os").homedir(), "~")}</code> (<b>${docCount}</b> items)</div>
-        <div class="detail"><b>Uptime:</b> ${uptime}s</div>
+        <h1>Honoka Bridge <span class="status-tag">Online</span></h1>
+        <div class="detail">Version: <code>v${BRIDGE_VERSION}</code> | Uptime: <code>${uptime}s</code></div>
+        <div class="detail">Library: <code>${docCount} documents</code> in <code>${DOCS_DIR}</code></div>
       </div>
 
       <div class="card">
-        <h2 style="font-size: 1rem; margin-top: 0">System Capabilities</h2>
-        <div class="cap-item">
-          <span class="cap-label">Video Engine (yt-dlp)</span>
-          <span>
-            <span class="badge ${caps.ytdlp ? 'badge-ok' : 'badge-missing'}">${caps.ytdlp ? 'Installed' : 'Missing'}</span>
-            ${!caps.ytdlp ? '<a class="guide-link" href="https://github.com/yt-dlp/yt-dlp#installation" target="_blank">Install</a>' : ''}
-          </span>
+        <h1>🎬 Video Downloader</h1>
+        <div class="input-group">
+          <input type="text" id="videoUrl" placeholder="Paste X or YouTube URL here...">
+          <button onclick="startDownload()">Download</button>
         </div>
-        <div class="cap-item">
-          <span class="cap-label">Media Processor (ffmpeg)</span>
-          <span>
-            <span class="badge ${caps.ffmpeg ? 'badge-ok' : 'badge-missing'}">${caps.ffmpeg ? 'Installed' : 'Missing'}</span>
-            ${!caps.ffmpeg ? '<a class="guide-link" href="https://ffmpeg.org/download.html" target="_blank">Install</a>' : ''}
-          </span>
-        </div>
+        <div id="downloadStatus"></div>
       </div>
-      
+
+      <script>
+        async function startDownload() {
+          const url = document.getElementById('videoUrl').value;
+          if (!url) return;
+          const btn = document.querySelector('button');
+          btn.disabled = true;
+          btn.innerText = 'Starting...';
+          
+          try {
+            const res = await fetch('/api/video/download', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url })
+            });
+            const data = await res.json();
+            if (data.ok) {
+              pollProgress();
+            } else {
+              alert('Error: ' + data.error);
+            }
+          } catch (e) {
+            alert('Failed to connect to Bridge');
+          } finally {
+            btn.disabled = false;
+            btn.innerText = 'Download';
+          }
+        }
+
+        async function pollProgress() {
+          const statusDiv = document.getElementById('downloadStatus');
+          const interval = setInterval(async () => {
+            const res = await fetch('/api/video/status');
+            const data = await res.json();
+            if (data.downloads && data.downloads.length > 0) {
+              statusDiv.innerHTML = data.downloads.map(d => \`
+                <div class="progress-item">
+                  <span>\${d.url.substring(0, 30)}...</span>
+                  <span style="color: var(--primary); font-weight: bold;">\${d.progress}</span>
+                </div>
+              \`).join('');
+            } else if (data.downloads.length === 0) {
+              statusDiv.innerHTML = '<div style="color: var(--success); font-size: 0.8rem; margin-top: 0.5rem;">✅ All downloads completed!</div>';
+              setTimeout(() => { statusDiv.innerHTML = ''; }, 5000);
+              clearInterval(interval);
+            }
+          }, 2000);
+        }
+        // Check for active downloads on load
+        pollProgress();
+      </script>
       <div class="card" style="text-align: center">
         <div class="actions" style="border:none; padding:0">
-          <a href="/shutdown" class="btn-shutdown" onclick="return confirm('Really shutdown the bridge?')">🛑 Shutdown Server</a>
+          <a href="/restart" class="btn-shutdown" onclick="return confirm('Really restart the bridge?')">↻ Restart Bridge</a>
         </div>
       </div>
     </body>
@@ -1714,6 +1749,44 @@ async function handleRoot(req, res) {
   `;
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(html);
+}
+
+/**
+ * API: POST /api/video/download
+ */
+async function handleVideoDownload(req, res) {
+  const body = await readBody(req);
+  try {
+    const { url } = body;
+    if (!url) return json(res, 400, { ok: false, error: "URL is required" });
+
+    console.log(`[Universal-Downloader] Starting: ${url}`);
+    activeDownloads.set(url, { url, progress: "Starting..." });
+
+    // Fire and forget download
+    downloadUniversalVideo(url, (progress) => {
+      activeDownloads.set(url, { url, progress: progress + "%" });
+    }).then((result) => {
+      console.log(`[Universal-Downloader] Finished: ${url} -> ${result.filename}`);
+      activeDownloads.delete(url);
+    }).catch((err) => {
+      console.error(`[Universal-Downloader] Failed: ${url}`, err.message);
+      activeDownloads.set(url, { url, progress: "Error: " + err.message });
+      setTimeout(() => activeDownloads.delete(url), 15000); 
+    });
+
+    json(res, 200, { ok: true });
+  } catch (e) {
+    json(res, 500, { ok: false, error: e.message });
+  }
+}
+
+/**
+ * API: GET /api/video/status
+ */
+function handleVideoStatus(req, res) {
+  const downloads = Array.from(activeDownloads.values());
+  json(res, 200, { ok: true, downloads });
 }
 
 function handleShutdown(req, res) {
@@ -2340,10 +2413,15 @@ function initTelegramBot() {
 
   const bot = new TelegramBot(token, {
     polling: {
-      interval: 1000,
+      interval: 2000, // Slightly longer interval
       autoStart: true,
       params: { timeout: 30 },
     },
+    request: {
+      agentOptions: {
+        family: 4
+      }
+    }
   });
   _telegramBot = bot;
   console.log("  Telegram: bot started ✓");
@@ -2407,21 +2485,24 @@ function initTelegramBot() {
           try {
             let lastUpdate = 0;
             const videoResult = await downloadUniversalVideo(rawUrl, async (progress) => {
-              // Throttle updates to avoid Telegram rate limits (max once every 3 seconds)
+              // Console log for debugging
+              console.log(`[Telegram-Bot] Download progress for ${rawUrl}: ${progress}`);
+              
               const now = Date.now();
               if (now - lastUpdate > 3000) {
                 lastUpdate = now;
-                await bot.editMessageText(`🎬 *Downloading Video* …\n\n🔗 ${rawUrl}\n📊 *Progress:* ${progress}\n⏳ Please wait, this may take a while.`, {
+                // Removed Markdown to avoid errors with underscores/stars in titles
+                await bot.editMessageText(`🎬 Downloading Video ...\n\n🔗 ${rawUrl}\n📊 Progress: ${progress}\n⏳ Please wait, this may take a while.`, {
                   chat_id: chatId,
-                  message_id: statusMsg.message_id,
-                  parse_mode: "Markdown"
-                }).catch(() => {}); // Ignore edit errors
+                  message_id: statusMsg.message_id
+                }).catch((e) => {
+                  console.error("[Telegram-Bot] Progress update failed:", e.message);
+                });
               }
             });
-            await bot.editMessageText(`✅ *Video Saved!*\n\n📁 \`${videoResult.filename}\`\nℹ️ Saved to \`Inbound_Videos\` folder.`, {
+            await bot.editMessageText(`✅ Video Saved!\n\n📁 ${videoResult.filename}\nℹ️ Saved to Inbound_Videos folder.`, {
               chat_id: chatId,
-              message_id: statusMsg.message_id,
-              parse_mode: "Markdown"
+              message_id: statusMsg.message_id
             });
             continue; 
           } catch (vErr) {
@@ -2525,11 +2606,14 @@ async function downloadUniversalVideo(url, onProgress) {
 
     console.log(`[Honoka] Starting universal yt-dlp for: ${url}`);
     
-    // Command: yt-dlp -o "pattern" "url"
-    const proc = spawn("yt-dlp", [
+    // Using absolute path to avoid PATH issues
+    const YTDLP_PATH = "/home/koto/miniconda3/bin/yt-dlp";
+    
+    const proc = spawn(YTDLP_PATH, [
       "--no-playlist",
-      "--newline", // Crucial for parsing progress
+      "--newline", 
       "--merge-output-format", "mp4",
+      "--cookies-from-browser", "chrome",
       "--no-check-certificates",
       "-o", outputPattern,
       url
@@ -2538,15 +2622,22 @@ async function downloadUniversalVideo(url, onProgress) {
     let stderr = "";
     proc.stdout.on("data", (data) => {
       const line = data.toString();
-      // Look for: [download]  15.0% of 100MB at ...
-      const match = line.match(/\[download\]\s+(\d+\.\d+%)/);
+      const match = line.match(/\[download\]\s+(\d+(?:\.\d+)?%)/);
       if (match && onProgress) {
         onProgress(match[1]);
       }
     });
 
-    proc.stderr.on("data", (data) => { stderr += data.toString(); });
+    proc.stderr.on("data", (data) => { 
+      stderr += data.toString();
+      console.log(`[yt-dlp-stderr] ${data.toString().trim()}`);
+    });
     
+    proc.on("error", (err) => {
+      console.error("[proc-error]", err);
+      reject(new Error(`Failed to start yt-dlp: ${err.message}`));
+    });
+
     proc.on("close", (code) => {
       if (code === 0) {
         const files = fs.readdirSync(videoDir);
@@ -2559,15 +2650,15 @@ async function downloadUniversalVideo(url, onProgress) {
         
         resolve({ success: true, filename: matching || "Video saved" });
       } else {
-        reject(new Error(`yt-dlp exited with code ${code}. Error: ${stderr}`));
+        reject(new Error(`yt-dlp exited with code ${code}. Error: ${stderr.substring(0, 200)}`));
       }
     });
 
-    // Timeout failsafe: 2 minutes
+    // Increased timeout to 10 minutes for larger videos
     setTimeout(() => {
       proc.kill();
-      reject(new Error("yt-dlp timed out after 2 minutes"));
-    }, 120000);
+      reject(new Error("yt-dlp timed out after 10 minutes"));
+    }, 600000);
   });
 }
 
@@ -2584,7 +2675,9 @@ const server = http.createServer(async (req, res) => {
   const route = url.pathname;
 
   try {
-    if (route === "/" && req.method === "GET") return handleDashboard(req, res);
+    if (route === "/api/video/download" && req.method === "POST") return await handleVideoDownload(req, res);
+    if (route === "/api/video/status" && req.method === "GET") return handleVideoStatus(req, res);
+    if (route === "/" && req.method === "GET") return handleRoot(req, res);
     if (route === "/status" && req.method === "GET") return handleStatus(req, res);
     if (route === "/shutdown" && req.method === "GET") return handleShutdown(req, res);
     if (route === "/list" && req.method === "GET") return handleList(req, res);

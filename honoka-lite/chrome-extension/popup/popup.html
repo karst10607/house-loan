@@ -11,6 +11,7 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="tab-analysis">Analysis</button>
       <button class="tab-btn" data-tab="tab-clipper">Clipper</button>
+      <button class="tab-btn" data-tab="tab-video">Video</button>
     </div>
 
     <!-- Analysis Tab -->
@@ -69,6 +70,16 @@
 
         <button id="start-clipper" class="clip-btn">開始視覺選取</button>
         <div id="clipper-status" class="hint" style="margin-top: 10px; min-height: 20px; color: #2dd4bf;"></div>
+      </div>
+    <!-- Video Tab -->
+    <div id="tab-video" class="tab-content">
+      <div class="clipper-panel">
+        <p>🎬 Universal Video Downloader</p>
+        <div id="video-info" style="margin-bottom: 15px; font-size: 0.8em; color: #8892b0;">
+          Detecting video content...
+        </div>
+        <button id="download-video" class="clip-btn" style="background: #3b82f6;">Download Current Video</button>
+        <div id="video-status" class="hint" style="margin-top: 10px; min-height: 20px;"></div>
       </div>
     </div>
   </div>
