@@ -26,6 +26,55 @@ const http = require("http");
 const https = require("https");
 http.globalAgent.family = 4;
 https.globalAgent.family = 4;
+
+// Site-specific extraction rules for property websites
+const SITE_RULES = {
+  "sale.591.com.tw": {
+    name: "591 售屋網",
+    priceSelector: ".house-price .price",
+    extract: (html, window) => {
+      // 591 hides data in dataLayer or INITIAL_STATE
+      const dataLayerMatch = html.match(/window\.dataLayer\s*=\s*window\.dataLayer\s*\|\|\s*\[\];\s*window\.dataLayer\.push\((\{.*?\})\)/);
+      const initialStateMatch = html.match(/window\.__INITIAL_STATE__\s*=\s*(\{.*?\});/);
+      let data = {};
+      if (initialStateMatch) try { data = JSON.parse(initialStateMatch[1]); } catch(e){}
+      if (dataLayerMatch) try { Object.assign(data, JSON.parse(dataLayerMatch[1])); } catch(e){}
+      
+      return {
+        price: data.price_name || data.price || "",
+        ping: data.area_name || data.area || "",
+        floor: data.floor_name || data.floor || "",
+        layout: data.layout_name || data.layout || "",
+        address: data.address || "",
+        community: data.community_name || ""
+      };
+    }
+  },
+  "buy.yungching.com.tw": {
+    name: "永慶房仲網",
+    extract: (html, window) => {
+      const dataLayerMatch = html.match(/window\.dataLayer\s*=\s*\[(\{.*?\})\]/);
+      let data = {};
+      if (dataLayerMatch) try { data = JSON.parse(dataLayerMatch[1]); } catch(e){}
+      return {
+        price: data.price || "",
+        ping: data.area || "",
+        floor: data.floor || "",
+        layout: data.layout || "",
+        address: data.address || ""
+      };
+    }
+  },
+  "www.great-home.com.tw": {
+    name: "大家房屋",
+    extract: (html, window) => {
+      // Basic extraction for now
+      return {
+        price: window.document.querySelector(".price")?.textContent?.trim() || ""
+      };
+    }
+  }
+};
 const fs = require("fs");
 const path = require("path");
 const { execFile, exec } = require("child_process");
@@ -239,6 +288,25 @@ async function saveToDisk(data) {
   const imgDir = path.join(docDir, "images");
   fs.mkdirSync(imgDir, { recursive: true });
 
+  // --- Site-Specific Extraction (591, Yungching, etc.) ---
+  let enrichedProperties = { ...properties };
+  if (url && html) {
+    const domain = new URL(url).hostname;
+    const rule = SITE_RULES[domain];
+    if (rule && rule.extract) {
+      console.log(`[Bridge] Applying site rules for ${domain}...`);
+      try {
+        const { JSDOM } = require("jsdom");
+        const dom = new JSDOM(html, { url });
+        const siteData = rule.extract(html, dom.window);
+        enrichedProperties = { ...enrichedProperties, ...siteData };
+        console.log(`[Bridge] Extracted:`, siteData);
+      } catch (err) {
+        console.error(`[Bridge] Site extraction failed:`, err.message);
+      }
+    }
+  }
+
   let md = markdown || "";
 
   if (html && !md) {
@@ -298,9 +366,9 @@ async function saveToDisk(data) {
       `saved_at: "${new Date().toISOString()}"`,
       properties ? `properties:` : null,
     ].filter(Boolean);
-    if (properties) {
-      for (const [k, v] of Object.entries(properties)) {
-        fm.push(`  ${k}: "${String(v).replace(/"/g, '\\"')}"`);
+    if (enrichedProperties) {
+      for (const [k, v] of Object.entries(enrichedProperties)) {
+        if (v) fm.push(`  ${k}: "${String(v).replace(/"/g, '\\"')}"`);
       }
     }
     fm.push("---", "", md);
@@ -319,12 +387,13 @@ async function saveToDisk(data) {
   writeRegistry(reg);
 
   // Save content
-  fs.writeFileSync(path.join(docDir, "index.md"), md, "utf8");
+  const filename = "index.md"; // Centralized filename definition
+  fs.writeFileSync(path.join(docDir, filename), md, "utf8");
   if (html) {
     fs.writeFileSync(path.join(docDir, "source.html"), html, "utf8");
   }
 
-  return { ok: true, slug, folder: slug, path: docDir };
+  return { ok: true, slug, folder: slug, path: docDir, filename };
 }
 
 // ── Handlers ──
@@ -336,6 +405,127 @@ async function handleSave(req, res) {
     json(res, 200, { ok: true, ...result });
   } catch (err) {
     json(res, 400, { error: err.message });
+  }
+}
+
+async function ensurePlaywright() {
+  try {
+    const { chromium } = require("playwright");
+    // Just try to get the path, if it fails, it usually means not installed
+    chromium.executablePath();
+    return true;
+  } catch (err) {
+    console.log("[Playwright] Chromium not found. Attempting automatic installation...");
+    try {
+      const { execSync } = require("child_process");
+      // Use npx to install only chromium to save space and time
+      execSync("npx playwright install chromium", { stdio: "inherit" });
+      return true;
+    } catch (installErr) {
+      console.error("[Playwright] Auto-install failed:", installErr.message);
+      return false;
+    }
+  }
+}
+
+async function performCapture(url, targetDir) {
+  await ensurePlaywright();
+  console.log(`[Capture] Starting full-page capture for: ${url}`);
+  let browser;
+  try {
+    const { chromium } = require("playwright");
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    });
+    const page = await context.newPage();
+    
+    await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
+
+    // --- Data Extraction inside the Browser ---
+    const extractedData = await page.evaluate(() => {
+      const data = {};
+      try {
+        // Try to get 591 dataLayer
+        if (window.dataLayer) {
+          const item = window.dataLayer.find(x => x && x.price_name);
+          if (item) {
+            data.price = item.price_name;
+            data.ping = item.area_name;
+            data.floor = item.floor_name;
+            data.layout = item.layout_name;
+            data.community = item.community_name;
+          }
+        }
+        // Try INITIAL_STATE
+        if (window.__INITIAL_STATE__ && !data.price) {
+          const state = window.__INITIAL_STATE__;
+          data.price = state.price_name || state.price;
+          data.ping = state.area_name || state.area;
+          data.floor = state.floor_name || state.floor;
+          data.layout = state.layout_name || state.layout;
+        }
+        // Fallback: DOM query for Price if still empty (明文網站)
+        if (!data.price) {
+          const priceEl = document.querySelector(".house-price .price, .house-info-price, .price");
+          if (priceEl) data.price = priceEl.innerText.trim();
+        }
+      } catch (e) {}
+      return data;
+    });
+
+    console.log(`[Capture] Data extracted via Playwright:`, extractedData);
+
+    // Scroll to bottom to trigger lazy loading
+    await page.evaluate(async () => {
+      await new Promise((resolve) => {
+        let totalHeight = 0;
+        const distance = 100;
+        const timer = setInterval(() => {
+          const scrollHeight = document.body.scrollHeight;
+          window.scrollBy(0, distance);
+          totalHeight += distance;
+          if (totalHeight >= scrollHeight) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 100);
+      });
+    });
+
+    await page.waitForTimeout(2000);
+
+    const pngPath = path.join(targetDir || os.tmpdir(), "fullpage.png");
+    const pdfPath = path.join(targetDir || os.tmpdir(), "fullpage.pdf");
+
+    await page.screenshot({ path: pngPath, fullPage: true });
+    await page.pdf({ path: pdfPath, format: "A4", printBackground: true });
+
+    await browser.close();
+    return { success: true, data: extractedData, png: pngPath, pdf: pdfPath };
+  } catch (err) {
+    if (browser) await browser.close();
+    console.error(`[Capture] Failed: ${err.message}`);
+    throw err;
+  }
+}
+
+async function handleCapture(req, res) {
+  const body = await readBody(req);
+  const { url, folder } = body;
+  if (!url) return json(res, 400, { error: "URL required" });
+  
+  const targetDir = folder ? path.join(DOCS_DIR, folder) : null;
+  if (targetDir && !fs.existsSync(targetDir)) {
+    return json(res, 400, { error: "Target folder does not exist" });
+  }
+
+  try {
+    await performCapture(url, targetDir);
+    json(res, 200, { ok: true, message: "Capture completed" });
+  } catch (err) {
+    json(res, 500, { error: err.message });
   }
 }
 
@@ -1617,7 +1807,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.4.1";
+const BRIDGE_VERSION = "1.4.6";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
@@ -2433,16 +2623,26 @@ function initTelegramBot() {
   let _errCount = 0;
   bot.on("polling_error", (err) => {
     const now = Date.now();
-    if (now - _lastPollingErr > 30000) {
-      console.error("  Telegram: polling error:", err.message);
+    const isAggregateError = err.name === 'AggregateError' || (err.message && err.message.includes('AggregateError'));
+    
+    if (now - _lastPollingErr > 15000) {
+      console.error(`  Telegram: polling error${isAggregateError ? ' (AggregateError)' : ''}:`, err.message);
       _lastPollingErr = now;
       _errCount = 1;
     } else {
       _errCount++;
     }
-    // We no longer call bot.stopPolling() here because the cluster manager 
-    // handles hard restarts. By not stopping, the bot library will automatically 
-    // reconnect when the network becomes available again!
+
+    // If we hit too many errors quickly, restart polling after a delay
+    if (_errCount > 5) {
+      console.warn("  Telegram: too many polling errors, cooling down for 10s...");
+      bot.stopPolling().then(() => {
+        setTimeout(() => {
+          bot.startPolling().catch(e => console.error("  Telegram: restart failed:", e.message));
+        }, 10000);
+      }).catch(() => {});
+      _errCount = 0;
+    }
   });
 
   bot.on("message", async (msg) => {
@@ -2556,13 +2756,80 @@ function initTelegramBot() {
           const result = await saveToDisk({
             title:    article.title || rawUrl,
             markdown,
-            html:     resp.data, // <--- Pass raw HTML here!
+            html:     resp.data,
             url:      rawUrl,
             source:   "telegram",
-            category: "reference",
+            category: "real-estate",
+            properties: {} // Pre-create properties area
           });
 
-          await bot.editMessageText(`✅ *Saved successfully!*\n\n📄 *${article.title || "Untitled"}*\n📁 \`${result.folder}\`\n\n[Open in Browser](http://127.0.0.1:44124/charts/)`, { 
+          // Step 2: Automated Capture (PNG/PDF)
+          await bot.editMessageText(`📸 Generating Screenshot & PDF...\n(This may take 15-20 seconds)`, { chat_id: chatId, message_id: statusMsg.message_id });
+          
+          let captureStatus = "";
+          let finalSiteData = {};
+          try {
+            // BUG FIX: Telegram uses INBOX_DIR, not DOCS_DIR
+            const targetDir = path.join(INBOX_DIR, result.folder);
+            const captureResult = await performCapture(rawUrl, targetDir);
+            captureStatus = "\n🖼️ *Full-page Capture:* OK";
+            finalSiteData = captureResult.data || {};
+            
+            // BUG FIX: Update the Markdown file with ALL real data from Playwright
+            if (finalSiteData && Object.keys(finalSiteData).length > 0) {
+              // Dynamic filename from saveToDisk (future-proof)
+              const mdPath = path.join(targetDir, result.filename);
+              if (fs.existsSync(mdPath)) {
+                let content = fs.readFileSync(mdPath, "utf8");
+                
+                // Construct new properties block
+                let propLines = "properties:\n";
+                let hasData = false;
+                for (const [k, v] of Object.entries(finalSiteData)) {
+                  if (v !== undefined && v !== null && v !== "" && v !== "undefined") {
+                    propLines += `  ${k}: "${String(v).replace(/"/g, '\\"')}"\n`;
+                    hasData = true;
+                  }
+                }
+
+                if (hasData) {
+                  console.log(`[Telegram] Injecting these properties into ${result.filename}:\n${propLines}`);
+                  if (content.includes("properties:")) {
+                    // Replace everything from properties: to the next --- or end of frontmatter
+                    content = content.replace(/properties:[\s\S]*?(\n---|$)/, propLines + "---");
+                  } else {
+                    // Fallback: insert before the second ---
+                    const parts = content.split("---");
+                    if (parts.length >= 3) {
+                      parts[1] = parts[1] + propLines;
+                      content = parts.join("---");
+                    }
+                  }
+                  fs.writeFileSync(mdPath, content);
+                  console.log(`[Telegram] ${result.filename} successfully updated.`);
+                }
+              }
+            }
+          } catch (capErr) {
+            console.error("[Telegram] Capture failed:", capErr.message);
+            captureStatus = "\n⚠️ *Full-page Capture:* Failed (" + capErr.message.substring(0, 50) + ")";
+          }
+
+          // Check if we extracted property info
+          let propInfo = "";
+          const displayPrice = finalSiteData.price || "";
+          const displayPing = finalSiteData.ping || "";
+          const displayFloor = finalSiteData.floor || "";
+          const displayLayout = finalSiteData.layout || "";
+          const displayCommunity = finalSiteData.community || "";
+          
+          if (displayPrice) propInfo = `\n💰 *Price:* ${displayPrice}`;
+          if (displayPing) propInfo += `\n📏 *Size:* ${displayPing} 坪`;
+          if (displayFloor) propInfo += `\n🏢 *Floor:* ${displayFloor}F`;
+          if (displayLayout) propInfo += `\n🏠 *Layout:* ${displayLayout}`;
+          if (displayCommunity) propInfo += `\n🏘️ *Community:* ${displayCommunity}`;
+
+          await bot.editMessageText(`✅ *Saved successfully!*${propInfo}${captureStatus}\n\n📄 *${article.title || "Untitled"}*\n📁 \`${result.folder}\`\n\n[Open in Browser](http://127.0.0.1:44124/charts/)`, { 
             chat_id: chatId, 
             message_id: statusMsg.message_id,
             parse_mode: "Markdown" 
@@ -2682,6 +2949,7 @@ const server = http.createServer(async (req, res) => {
     if (route === "/shutdown" && req.method === "GET") return handleShutdown(req, res);
     if (route === "/list" && req.method === "GET") return handleList(req, res);
     if (route === "/save" && req.method === "POST") return await handleSave(req, res);
+    if (route === "/api/capture" && req.method === "POST") return await handleCapture(req, res);
     if (route === "/new" && req.method === "POST") return await handleNew(req, res);
     if (route === "/open" && req.method === "POST") return await handleOpen(req, res);
     if (route === "/delete" && req.method === "POST") return await handleDelete(req, res);
@@ -2751,7 +3019,7 @@ if (process.platform === "win32" && process.argv.includes("--install")) {
   }
 }
 
-server.listen(PORT, "127.0.0.1", () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`\n  Honoka Bridge v${BRIDGE_VERSION} (pid ${process.pid})`);
   console.log(`  Listening on http://127.0.0.1:${PORT}`);
   console.log(`  Docs directory: ${DOCS_DIR}`);

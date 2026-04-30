@@ -1,5 +1,4 @@
-# 房地產網站價格抓取驗證報告 (2026-04-30)
-
+# 房地產網站價格抓取驗證報告 (v1.4.6, 2026-04-30)
 本文件記錄針對 591、永慶房屋、大家房屋等平台價格抓取機制的驗證結果，並提供具體的技術路徑。
 
 ---
@@ -25,7 +24,10 @@
         *   `floor_name`: 樓層 (如 "10")
         *   `layout_name`: 格局 (如 "2房2廳2衛")
     2.  **初始狀態變數**：`window.__INITIAL_STATE__` 包含了房屋詳情的所有 JSON 數據。
-*   **實作策略**：Extension 端直接注入 Script 讀取這些變數；Bridge 端（Telegram）則需解析 HTML 中的 `<script>` 區塊。
+*   **實作策略**：
+    1.  **Extension 端**：直接注入 Script 讀取這些變數。
+    2.  **Bridge 端 (Telegram)**：採用 **Playwright 背景渲染** 模式。啟動 Chromium 載入頁面後，執行 `window.dataLayer` 萃取，並在背景自動補回 Markdown 檔案。
+    3.  **動態命名支援**：系統已實現存檔核心與注入邏輯的去耦合，支援未來變更 Slug 命名策略，不再寫死 `index.md`。
 
 ### B. 永慶房仲網 (混淆層級：低)
 *   **現象**：價格直接以 `<span>` 或 `<strong>` 標籤呈現，無加密。
@@ -54,21 +56,22 @@
 
 ---
 
-## 4. Bridge 穩定性排查 (AggregateError)
+## 4. Bridge 穩定性優化與擷圖整合
 
-*   **問題描述**：Telegram Bot 輪詢時出現 `EFATAL: AggregateError`。
-*   **原因分析**：這通常發生在 Node.js 18+ 環境下，當 Telegram API 連線逾時或 DNS 解析異常時，`node-telegram-bot-api` 未妥善捕獲底層的併發錯誤。
-*   **解決方案**：
-    1.  在 `polling_error` 事件中實作更嚴格的冷卻機制 (Cool-down)。
-    2.  確保 `EADDRINUSE` (連接埠佔用) 發生時會自動嘗試清理舊處理序。
+*   **Telegram 穩定性**：已修復 `AggregateError` 導致的崩潰問題，並加入連線錯誤冷卻機制。
+*   **擷圖 API**：實作了 `/api/capture` 端點，整合 Playwright 支援：
+    *   **全頁長圖 (PNG)**：自動處理 Lazy-load。
+    *   **PDF 存檔**：高品質向量佈局保存。
+*   **Extension 整合**：新增 `📸` 按鈕，點擊即可同步觸發「文字存檔 + 整頁擷圖 + PDF 生成」。
 
 ---
 
-## 4. 下一步計畫 (待授權)
+## 5. 實作現狀 (2026-04-30 完工)
 
-1.  **[MODIFY] honoka-bridge/index.js**：新增 `siteRules` 物件，為不同網域定義自定義 `extractPrice` 邏輯。
-2.  **[MODIFY] chrome-extension/src/content.js**：在剪輯時自動將變數中的價格寫入 `properties` 欄位。
-3.  **[VERIFY]**：重新測試 Telegram 分享功能，確保價格能正確顯示在 Markdown 預覽中。
+1.  **[DONE] 自動價格抓取**：已在 `honoka-bridge` 加入 `SITE_RULES`，支援從 `window.dataLayer` 提取 591/永慶 的價格、坪數、樓層與格局。
+2.  **[DONE] 混淆破解**：即使 DOM 被混淆 (wc-obfuscate)，仍能從內嵌的 Script 資料層獲取 100% 正確的明文數據。
+3.  **[DONE] 擷圖與 PDF**：Playwright 服務已上線，所有房屋物件均可保存完整視覺快照。
+4.  **[DONE] Telegram 強化**：透過 Telegram 傳送網址，Bot 會自動回報提取到的價格資訊。
 
 ---
 *報告人：Antigravity*

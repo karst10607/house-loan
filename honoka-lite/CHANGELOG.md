@@ -1,4 +1,33 @@
-# Honoka Lite Changelog
+# Honoka Lite 
+
+
+## v1.4.6
+
+### New Features
+- **Playwright Auto-Installer**: Bridge now detects missing browser binaries on Windows/Mac and attempts to auto-install them.
+- **Full Property Data Sync**: All data extracted via Playwright (price, ping, floor, layout, community) is now correctly written to the Markdown frontmatter.
+- **Filename Decoupling**: The property injection logic is no longer hardcoded to `index.md`. It dynamically follows the filename returned by the storage core, enabling future custom naming strategies (slugs).
+
+## v1.4.5
+
+### Fixes
+- **Telegram Capture Stability**: Fixed path errors and ensured accurate property data extraction from dynamic sites using Playwright in the Telegram bot handler.
+
+## v1.4.4
+
+### New Features
+- **Automated Capture in Telegram Bot**: Sending a URL to the Telegram bot now automatically triggers the full-page capture pipeline (PNG screenshot and PDF archive), in addition to the standard Markdown extraction.
+
+## v1.4.3
+
+### Fixes
+- **Linux Connectivity Patch**: Changed bridge listen address from `127.0.0.1` to `0.0.0.0`. This resolves a common Linux issue where the browser attempts to connect via IPv6 (`::1`) while the bridge was only listening on IPv4, causing "Connection Refused" errors in the Chrome Extension.
+
+## v1.4.2
+
+### New Features
+- **Advanced Property Data Extraction**: Implemented site-specific logic for **591 售屋網**, **永慶房仲網**, and **大家房屋**. Bypasses DOM obfuscation by extracting data directly from `window.dataLayer` and `window.__INITIAL_STATE__`.
+- **Automated Page Capture**: Added a new "📸 Capture" feature. The bridge now uses **Playwright** to automatically scroll the page (triggering lazy-load) and generate a full-page **PNG screenshot** and **PDF archive** saved alongside the markdown file.
 
 ## v1.4.1
 

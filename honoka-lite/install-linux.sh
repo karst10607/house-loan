@@ -40,16 +40,19 @@ StandardError=append:$LOG_DIR/stderr.log
 WantedBy=default.target
 EOF
 
-systemctl --user daemon-reload
-systemctl --user enable "$SERVICE_NAME" >/dev/null 2>&1
-systemctl --user restart "$SERVICE_NAME"
+# systemctl --user daemon-reload
+# systemctl --user enable "$SERVICE_NAME" >/dev/null 2>&1
+# systemctl --user restart "$SERVICE_NAME"
 
-sleep 1
-if curl -s http://127.0.0.1:44124/status > /dev/null 2>&1; then
-  echo "  ✓ Bridge 成功運行於 http://127.0.0.1:44124"
-else
-  echo "  ⚠ Bridge 啟動可能有問題，請檢查日誌: cat $LOG_DIR/stderr.log"
-fi
+echo "  ℹ Bridge 背景服務已停用 (改為手動啟動)。"
+echo "  ℹ 手動啟動指令: cd $BRIDGE_DIR && npm start"
+
+# sleep 1
+# if curl -s http://127.0.0.1:44124/status > /dev/null 2>&1; then
+#   echo "  ✓ Bridge 成功運行於 http://127.0.0.1:44124"
+# else
+#   echo "  ⚠ Bridge 啟動可能有問題，請檢查日誌: cat $LOG_DIR/stderr.log"
+# fi
 
 # ======== 2. 安裝 Chrome 擴充功能 ========
 echo "[2/2] 登錄 Chrome 擴充功能..."
@@ -87,6 +90,6 @@ fi
 echo ""
 echo "=============================================="
 echo "安裝完成！"
-echo "1. Bridge 伺服器已在背景執行，開機也會自動啟動。"
+echo "1. Bridge 伺服器改為手動啟動：cd $BRIDGE_DIR && npm start"
 echo "2. 請重新啟動 Google Chrome / Chromium 瀏覽器。"
 echo "=============================================="

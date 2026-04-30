@@ -212,6 +212,22 @@ function extractPageProperties() {
     }
   }
 
+  // Strategy 4: House site specific extraction (591, Yungching)
+  // Since we are in a content script, we can't directly read window.dataLayer if it's set by page JS.
+  // We'll look for script tags that contain the data.
+  if (window.location.hostname.includes("591.com.tw") || window.location.hostname.includes("yungching.com.tw")) {
+    const scripts = document.querySelectorAll("script");
+    for (const s of scripts) {
+      const text = s.textContent || "";
+      if (text.includes("window.dataLayer") || text.includes("window.__INITIAL_STATE__")) {
+        // We found a script that likely contains the data. 
+        // We'll let the Bridge handle the regex extraction since it's more robust there.
+        props["_site_detected"] = window.location.hostname;
+        break;
+      }
+    }
+  }
+
   return Object.keys(props).length > 0 ? props : null;
 }
 
@@ -881,7 +897,7 @@ function extractMarkdown() {
   return { markdown: lines.join("\n"), images, title };
 }
 
-async function saveLocally() {
+async function saveLocally(options = {}) {
   if (!bridgeAvailable) {
     await checkBridge();
     if (!bridgeAvailable) return { ok: false, error: "Bridge not running. Start with: node honoka-bridge/index.js" };
@@ -935,9 +951,25 @@ async function saveLocally() {
     const resp = await fetch(`${BRIDGE_URL}/save`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pageId, title, markdown, images: enrichedImages, properties, url, category }),
+      body: JSON.stringify({ 
+        pageId, title, markdown, 
+        images: enrichedImages, properties, url, category,
+        html: document.documentElement.outerHTML 
+      }),
     });
-    return await resp.json();
+    const result = await resp.json();
+    
+    // Trigger capture if requested
+    if (result.ok && options.capture) {
+      console.log("Honoka: triggering full-page capture...");
+      fetch(`${BRIDGE_URL}/api/capture`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, folder: result.folder })
+      }).catch(e => console.error("Capture failed:", e));
+    }
+    
+    return result;
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -987,6 +1019,7 @@ function renderOverlay(sections, budgetTotal) {
     <div class="honoka-pill-ring">${buildRingSvg(pct, ringColor, 32, 3, 13)}<span class="honoka-pill-pct">${pct}%</span></div>
     <span class="honoka-pill-tok">${tokLabel} tok</span>
     <button class="honoka-pill-save" title="Save locally">💾</button>
+    <button class="honoka-pill-capture" title="Save with full-page screenshot">📸</button>
     <button class="honoka-pill-close" title="Dismiss">×</button>
   `;
   overlay.appendChild(pill);
@@ -1099,6 +1132,17 @@ function renderOverlay(sections, budgetTotal) {
     saveBtn.title = result.ok ? `Saved to ${result.folder}` : (result.error || "Failed");
     saveBtn.style.filter = result.ok ? "hue-rotate(90deg) saturate(2)" : "";
     setTimeout(() => { saveBtn.textContent = "💾"; }, 3000);
+  });
+
+  const captureBtn = pill.querySelector(".honoka-pill-capture");
+  captureBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    captureBtn.textContent = "⏳";
+    const result = await saveLocally({ capture: true });
+    captureBtn.textContent = result.ok ? "✅" : "❌";
+    captureBtn.title = result.ok ? `Saved with screenshot to ${result.folder}` : (result.error || "Failed");
+    captureBtn.style.filter = result.ok ? "hue-rotate(180deg) saturate(2)" : "";
+    setTimeout(() => { captureBtn.textContent = "📸"; }, 3000);
   });
 
   // Close pill entirely
