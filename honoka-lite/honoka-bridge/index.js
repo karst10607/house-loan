@@ -1,14 +1,48 @@
 #!/usr/bin/env node
 
 const cluster = require('cluster');
+const { execSync } = require('child_process');
 
 if (cluster.isPrimary || cluster.isMaster) {
-  console.log(`[Honoka Manager] Starting Bridge on port ${process.env.HONOKA_PORT || "44124"}...`);
+  const PORT = process.env.HONOKA_PORT || "44124";
+  console.log(`[Honoka Manager] Starting Bridge on port ${PORT}...`);
+
+  // Auto-kill any stale process holding the port
+  try {
+    const isWin = process.platform === 'win32';
+    if (isWin) {
+      const output = execSync(`netstat -ano | findstr :${PORT}`, { encoding: 'utf8', timeout: 3000 });
+      const lines = output.trim().split('\n').filter(l => l.includes('LISTENING'));
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        const pid = parts[parts.length - 1];
+        if (pid && pid !== '0') {
+          try { execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore', timeout: 2000 }); console.log(`  Killed stale process (PID ${pid})`); } catch {}
+        }
+      }
+    } else {
+      try {
+        const pid = execSync(`lsof -ti:${PORT} 2>/dev/null || ss -tlnp sport = :${PORT} 2>/dev/null | grep -oP 'pid=\K\d+'`, { encoding: 'utf8', timeout: 3000 }).trim();
+        if (pid) {
+          execSync(`kill -9 ${pid} 2>/dev/null`, { stdio: 'ignore', timeout: 2000 });
+          console.log(`  Killed stale process (PID ${pid})`);
+        }
+      } catch {}
+    }
+  } catch {}
+
   cluster.fork();
 
+  let crashCount = 0;
   cluster.on('exit', (worker, code, signal) => {
-    console.log(`[Honoka Manager] Bridge worker died (code: ${code}). Restarting in 1.5s...`);
-    setTimeout(() => cluster.fork(), 1500);
+    crashCount++;
+    if (crashCount >= 10) {
+      console.error(`[Honoka Manager] Bridge crashed ${crashCount} times — giving up.`);
+      process.exit(1);
+      return;
+    }
+    console.log(`[Honoka Manager] Bridge worker died (code: ${code}). Restarting in ${Math.min(crashCount, 5) * 0.5}s...`);
+    setTimeout(() => { crashCount = Math.max(0, crashCount - 1); cluster.fork(); }, Math.min(crashCount, 5) * 500);
   });
   
   // Forward SIGINT to exit cleanly
