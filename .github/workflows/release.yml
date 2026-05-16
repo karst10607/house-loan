@@ -38,10 +38,10 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          # Copy bridge binaries
-          cp honoka-lite/honoka-bridge/bin/honoka-bridge.exe release-assets/
-          cp honoka-lite/honoka-bridge/bin/honoka-bridge-macos release-assets/
-          cp honoka-lite/honoka-bridge/bin/honoka-bridge-linux release-assets/
+          # Copy bridge binaries (if built — may fail with pkg, that's OK)
+          cp honoka-lite/honoka-bridge/bin/honoka-bridge.exe release-assets/ 2>/dev/null || true
+          cp honoka-lite/honoka-bridge/bin/honoka-bridge-macos release-assets/ 2>/dev/null || true
+          cp honoka-lite/honoka-bridge/bin/honoka-bridge-linux release-assets/ 2>/dev/null || true
 
           # Build clean extension distro (only what end-users need)
           mkdir -p release-assets/chrome-extension/dist
@@ -51,23 +51,21 @@ jobs:
           cp -r honoka-lite/chrome-extension/popup release-assets/chrome-extension/
           cp -r honoka-lite/chrome-extension/options release-assets/chrome-extension/
           cp -r honoka-lite/chrome-extension/icons release-assets/chrome-extension/
-          cp -r honoka-lite/chrome-extension/viewer release-assets/chrome-extension/
-          # Remove dev-only source files (not needed at runtime)
-          rm -rf release-assets/chrome-extension/src/.gitkeep 2>/dev/null || true
+          [ -d honoka-lite/chrome-extension/viewer ] && cp -r honoka-lite/chrome-extension/viewer release-assets/chrome-extension/ || true
 
           cd release-assets
-          zip -r honoka-lite-win64.zip honoka-bridge.exe chrome-extension
-          zip -r honoka-lite-macos.zip honoka-bridge-macos chrome-extension
-          zip -r honoka-lite-linux.zip honoka-bridge-linux chrome-extension
+          # Only zip what exists
+          zip -r honoka-lite-win64.zip honoka-bridge.exe chrome-extension 2>/dev/null || zip -r honoka-lite-win64.zip chrome-extension
+          zip -r honoka-lite-macos.zip honoka-bridge-macos chrome-extension 2>/dev/null || true
+          zip -r honoka-lite-linux.zip honoka-bridge-linux chrome-extension 2>/dev/null || true
 
       - name: Create GitHub Release (on tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/honoka-lite-win64.zip
-            release-assets/honoka-lite-macos.zip
-            release-assets/honoka-lite-linux.zip
+            release-assets/*.zip
           body_path: honoka-lite/CHANGELOG.md
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
