@@ -1,5 +1,21 @@
 # Honoka Bridge Changelog
 
+## v1.6.0 — 2026-05-16
+
+### Stability: Auto-kill stale port + crash loop protection
+
+- **Auto-kill**: Bridge now detects and kills any stale process holding port 44124 before starting, preventing EADDRINUSE crash on restart.
+- **Crash limit**: After 10 rapid crashes, bridge stops retrying instead of looping forever.
+- **Backoff**: Restart delay scales from 0.5s → 2.5s, reducing pressure on port binding.
+- **CI: Version sync**: Release workflow now auto-syncs version across `manifest.json`, `package.json`, and `index.js` (`BRIDGE_VERSION`) from the git tag.
+
+### Fixes
+
+- Fixed bridge version hard-coded in `index.js` (was reading from `package.json`, now a single constant `BRIDGE_VERSION`).
+- Synced Chrome extension version from 1.4.6 → 1.5.4.
+
+---
+
 ## v1.5.0 — 2026-05-16
 
 ### New Feature: Anytype Integration
