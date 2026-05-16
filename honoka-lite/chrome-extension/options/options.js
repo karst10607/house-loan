@@ -2197,6 +2197,11 @@ $("#sync-to-bridge").addEventListener("click", async () => {
 
 // ── Init ──
 
+async function fetchRepoTargets() {
+  // REPO targets feature — reserved for future use
+  if (!bridgeOk) return;
+}
+
 loadAll(async () => {
   showSyncDot(true);
   await checkBridge();
