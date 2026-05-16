@@ -1412,7 +1412,7 @@ async function handleBatchCompare(req, res) {
   json(res, 200, { ok: true, template: templateFolder, results });
 }
 
-const BRIDGE_VERSION = "1.5.0";
+const BRIDGE_VERSION = "1.5.4";
 const startedAt = new Date().toISOString();
 
 function handleStatus(req, res) {
