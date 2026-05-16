@@ -14,8 +14,8 @@
     "build:all": "npm run build:win && npm run build:macos && npm run build:linux"
   },
   "pkg": {
-    "assets": [],
-    "scripts": []
+    "assets": ["node_modules/**/*", "!node_modules/pkg-fetch/**"],
+    "scripts": ["settings.js", "saver.js", "capture.js", "site-rules.js", "services/**/*.js"]
   },
   "keywords": [
     "notion",
