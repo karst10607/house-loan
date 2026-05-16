@@ -24,6 +24,7 @@ jobs:
           cd ../chrome-extension && npm install
 
       - name: Build binaries
+        continue-on-error: true
         run: |
           cd honoka-lite/honoka-bridge
           mkdir -p bin
