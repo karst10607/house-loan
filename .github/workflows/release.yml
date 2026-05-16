@@ -22,8 +22,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd honoka-lite/honoka-bridge
-          npm install
+          cd honoka-lite/honoka-bridge && npm install
+          cd ../chrome-extension && npm install
 
       - name: Build binaries
         run: |
@@ -31,14 +31,31 @@ jobs:
           mkdir -p bin
           npm run build:all
 
+      - name: Build extension dist
+        run: |
+          cd honoka-lite/chrome-extension
+          npm run build
+
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
+          # Copy bridge binaries
           cp honoka-lite/honoka-bridge/bin/honoka-bridge.exe release-assets/
           cp honoka-lite/honoka-bridge/bin/honoka-bridge-macos release-assets/
           cp honoka-lite/honoka-bridge/bin/honoka-bridge-linux release-assets/
-          # Also include the extension folder for manual installation
-          cp -r honoka-lite/chrome-extension release-assets/
+
+          # Build clean extension distro (only what end-users need)
+          mkdir -p release-assets/chrome-extension/dist
+          cp honoka-lite/chrome-extension/manifest.json release-assets/chrome-extension/
+          cp honoka-lite/chrome-extension/dist/content.js release-assets/chrome-extension/dist/
+          cp -r honoka-lite/chrome-extension/src release-assets/chrome-extension/
+          cp -r honoka-lite/chrome-extension/popup release-assets/chrome-extension/
+          cp -r honoka-lite/chrome-extension/options release-assets/chrome-extension/
+          cp -r honoka-lite/chrome-extension/icons release-assets/chrome-extension/
+          cp -r honoka-lite/chrome-extension/viewer release-assets/chrome-extension/
+          # Remove dev-only source files (not needed at runtime)
+          rm -rf release-assets/chrome-extension/src/.gitkeep 2>/dev/null || true
+
           cd release-assets
           zip -r honoka-lite-win64.zip honoka-bridge.exe chrome-extension
           zip -r honoka-lite-macos.zip honoka-bridge-macos chrome-extension
