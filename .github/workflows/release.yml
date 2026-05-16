@@ -19,8 +19,14 @@ jobs:
       - name: Sync extension version to tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          echo "Syncing versions to $VERSION"
+          # Extension manifest
           jq --arg v "$VERSION" '.version = $v' honoka-lite/chrome-extension/manifest.json > manifest.tmp && mv manifest.tmp honoka-lite/chrome-extension/manifest.json
-          echo "Extension version synced to $VERSION"
+          # Bridge index.js (hardcoded BRIDGE_VERSION)
+          sed -i "s/const BRIDGE_VERSION = \"[0-9.]*\"/const BRIDGE_VERSION = \"$VERSION\"/" honoka-lite/honoka-bridge/index.js
+          # Bridge package.json
+          jq --arg v "$VERSION" '.version = $v' honoka-lite/honoka-bridge/package.json > pkg.tmp && mv pkg.tmp honoka-lite/honoka-bridge/package.json
+          echo "All versions synced to $VERSION"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
