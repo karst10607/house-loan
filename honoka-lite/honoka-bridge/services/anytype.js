@@ -35,15 +35,12 @@ async function saveToAnytype({ title, markdown, url, category, properties }) {
     // 1. 建立 Object
     const createPayload = {
       name: title,
-      type: resolveObjectType(category),
-      properties: mapProperties(properties, category),
+      type_key: resolveObjectType(category),
       body: markdown,
     };
 
-    // 如果有 URL，加入 source 屬性
-    if (url) {
-      createPayload.properties.source = url;
-    }
+    // 如果有 URL，加入 source 屬性（經測試 properties 陣列格式需配合 Anytype 的 relation link 規範）
+    // 目前 properties 格式待確認，先以 source URL 內嵌在 body 中
 
     const createResp = await axios.post(
       `${baseUrl}/v1/spaces/${settings.anytypeSpaceId}/objects`,
@@ -51,7 +48,7 @@ async function saveToAnytype({ title, markdown, url, category, properties }) {
       { headers, timeout: 10000 }
     );
 
-    const objectId = createResp.data?.id;
+    const objectId = createResp.data?.object?.id;
 
     if (!objectId) {
       console.error("[Anytype] Create succeeded but no object ID returned");
