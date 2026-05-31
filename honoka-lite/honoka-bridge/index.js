@@ -1671,6 +1671,51 @@ async function handleSettingsPost(req, res) {
   json(res, 200, { ok: true, changed });
 }
 
+// ── Extension Settings API (for Honoka extension sync across browsers) ──
+
+const EXT_SETTINGS_FILE = path.join(REGISTRY_DIR, "extension-settings.json");
+
+const EXT_SETTINGS_ALLOWED = [
+  "honoka_folders",
+  "honoka_history_limit",
+  "honoka_my_name",
+  "honoka_notion_user",
+  "honoka_visible_columns",
+  "honoka_hidden_columns",
+  "honoka_visible_local_columns",
+  "honoka_sort_column",
+  "honoka_sort_direction",
+  "honoka_notes",
+  "honoka_flags",
+];
+
+function handleExtSettingsGet(req, res) {
+  if (!fs.existsSync(EXT_SETTINGS_FILE)) return json(res, 200, {});
+  try {
+    const raw = fs.readFileSync(EXT_SETTINGS_FILE, "utf8");
+    json(res, 200, JSON.parse(raw));
+  } catch {
+    json(res, 200, {});
+  }
+}
+
+async function handleExtSettingsPost(req, res) {
+  const body = await readBody(req);
+  if (!body || typeof body !== "object") {
+    return json(res, 400, { error: "object required" });
+  }
+  const toStore = {};
+  for (const key of EXT_SETTINGS_ALLOWED) {
+    if (key in body) toStore[key] = body[key];
+  }
+  try {
+    fs.writeFileSync(EXT_SETTINGS_FILE, JSON.stringify(toStore, null, 2), "utf8");
+    json(res, 200, { ok: true, stored: Object.keys(toStore).length });
+  } catch (e) {
+    json(res, 500, { error: e.message });
+  }
+}
+
 function handleRestart(req, res) {
   json(res, 200, { ok: true, message: "Restarting bridge..." });
   console.log("  ↻ Restart requested via /restart endpoint");
@@ -2238,6 +2283,8 @@ const server = http.createServer(async (req, res) => {
     if (route === "/restart" && req.method === "POST") return handleRestart(req, res);
     if (route === "/api/settings" && req.method === "GET") return handleSettingsGet(req, res);
     if (route === "/api/settings" && req.method === "POST") return await handleSettingsPost(req, res);
+    if (route === "/extension-settings" && req.method === "GET") return handleExtSettingsGet(req, res);
+    if (route === "/extension-settings" && req.method === "POST") return await handleExtSettingsPost(req, res);
     if (route === "/settings" && req.method === "GET") return serveSettingsPage(res);
     if (route === "/history/ingest" && req.method === "POST") return await handleHistoryIngest(req, res);
     if (route === "/history/dump" && req.method === "GET") return handleHistoryDump(req, res);

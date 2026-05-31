@@ -50,9 +50,6 @@
         <div class="sidebar-item" id="open-analytics" title="Open analytics dashboard (requires Bridge)">
           <span class="si-icon">📊</span> Analytics
         </div>
-        <div class="sidebar-item" id="open-csv-viewer" title="Open CSV Viewer — no Bridge needed">
-          <span class="si-icon">📈</span> CSV Viewer
-        </div>
       </div>
       <div class="sidebar-divider"></div>
       <div id="folder-tree" class="folder-tree"></div>
@@ -115,6 +112,8 @@
           <button id="clear-history" class="btn btn-sm btn-danger">Clear all</button>
           <button id="sync-to-bridge" class="btn btn-sm btn-secondary"
             title="Push all history entries to Bridge for durable storage">Sync to Bridge</button>
+          <button id="restore-from-bridge" class="btn btn-sm btn-secondary"
+            title="Pull all history entries from Bridge into storage">Restore from Bridge</button>
           <button id="export-backup" class="btn btn-sm btn-secondary"
             title="Export all settings, history, folders as JSON">Export Honoka backup</button>
           <button id="import-backup" class="btn btn-sm btn-secondary" title="Import a previously exported backup">Import

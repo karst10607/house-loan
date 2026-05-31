@@ -1,5 +1,10 @@
 # Honoka Lite 
 
+## v1.7.0
+
+### New Features
+- **Cross-Browser Sync**: Added "Restore from Bridge" button. Sync full extension state (history + folders + settings) to Bridge and restore on any browser (Chrome, Vivaldi, Edge, Chromium). Settings are persisted via new Bridge endpoints: `GET/POST /extension-settings`.
+- **CWS-Ready Prep**: Removed CSV Viewer feature. Removed `viewer/` directory (csv-viewer.html, echarts.min.js).
 
 ## v1.4.6
 

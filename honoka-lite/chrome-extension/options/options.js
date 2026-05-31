@@ -2158,13 +2158,6 @@ $("#open-analytics").addEventListener("click", () => {
   window.open(`${BRIDGE_URL}/charts`, "_blank");
 });
 
-// ── CSV Viewer ──
-
-$("#open-csv-viewer").addEventListener("click", () => {
-  const url = chrome.runtime.getURL("viewer/csv-viewer.html");
-  chrome.tabs.create({ url });
-});
-
 // ── Sync all history to Bridge ──
 
 $("#sync-to-bridge").addEventListener("click", async () => {
@@ -2192,7 +2185,101 @@ $("#sync-to-bridge").addEventListener("click", async () => {
   }
   btn.textContent = "Sync to Bridge";
   btn.disabled = false;
-  showStatus(`Synced ${ok} entries to Bridge` + (fail ? ` (${fail} failed)` : "") + ".");
+  let statusMsg = `Synced ${ok} entries to Bridge` + (fail ? ` (${fail} failed)` : "") + ".";
+
+  // Also sync extension settings
+  try {
+    const all = await new Promise((r) => chrome.storage.local.get(null, r));
+    const settings = {};
+    for (const key of BACKUP_SETTINGS_KEYS) {
+      if (key in all) settings[key] = all[key];
+    }
+    const sResp = await fetch(`${BRIDGE_URL}/extension-settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+    if (sResp.ok) statusMsg += " Settings synced.";
+  } catch { statusMsg += " Settings sync failed."; }
+
+  showStatus(statusMsg);
+});
+
+// ── Restore all history from Bridge ──
+
+$("#restore-from-bridge").addEventListener("click", async () => {
+  const btn = $("#restore-from-bridge");
+  if (!bridgeOk) { showStatus("Bridge not running."); return; }
+  if (!confirm("Merge Bridge history into current storage? Existing entries with valid titles will NOT be overwritten.")) return;
+
+  btn.textContent = "Loading…";
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`${BRIDGE_URL}/history/dump`);
+    if (!resp.ok) { showStatus("Bridge returned error."); return; }
+    const entries = await resp.json();
+    if (entries.length === 0) { showStatus("No history on Bridge."); return; }
+
+    // Prepare storage writes
+    const toStore = {};
+    const pageIds = new Set(allHistory ? Object.keys(allHistory) : []);
+    let imported = 0;
+
+    for (let i = 0; i < entries.length; i++) {
+      const { pageId, _ingested_at, ...data } = entries[i];
+      if (!pageId) continue;
+
+      // Skip if already have a valid entry
+      const existing = allHistory?.[pageId];
+      if (existing && existing.title && existing.title !== "Untitled") continue;
+
+      toStore[_pageKey(pageId)] = data;
+      pageIds.add(pageId);
+      imported++;
+      if (i % 20 === 0) btn.textContent = `Preparing ${i + 1}/${entries.length}…`;
+    }
+
+    if (imported === 0) {
+      btn.textContent = "Restore from Bridge";
+      btn.disabled = false;
+      showStatus("All entries already exist in storage.");
+      return;
+    }
+
+    btn.textContent = `Writing ${imported} entries…`;
+    await new Promise((r) => chrome.storage.local.set(toStore, r));
+
+    // Update global index
+    const newIndex = [...pageIds];
+    await new Promise((r) => chrome.storage.local.set({ honoka_global_index: newIndex }, r));
+
+    // Reload in-memory data and re-render
+    _loadSplitKeys(newIndex, renderAll);
+
+    btn.textContent = "Restore from Bridge";
+    btn.disabled = false;
+    let restoreMsg = `Restored ${imported} entries from Bridge. Total: ${newIndex.length}`;
+
+    // Also restore extension settings from Bridge
+    try {
+      const sResp = await fetch(`${BRIDGE_URL}/extension-settings`);
+      if (sResp.ok) {
+        const extSettings = await sResp.json();
+        if (Object.keys(extSettings).length > 0) {
+          await new Promise((r) => chrome.storage.local.set(extSettings, r));
+          restoreMsg += ` Settings restored (${Object.keys(extSettings).length} keys).`;
+          // Re-run full load to pick up restored settings
+          loadAll(renderAll);
+        }
+      }
+    } catch { restoreMsg += " Settings restore failed."; }
+
+    showStatus(restoreMsg);
+  } catch (e) {
+    btn.textContent = "Restore from Bridge";
+    btn.disabled = false;
+    showStatus(`Restore failed: ${e.message}`);
+  }
 });
 
 // ── Init ──
