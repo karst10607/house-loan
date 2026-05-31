@@ -2,8 +2,10 @@
   "name": "honoka-extension-builder",
   "version": "1.1.3",
   "scripts": {
-    "build": "esbuild src/content.js --bundle --outfile=dist/content.js --minify",
-    "watch": "esbuild src/content.js --bundle --outfile=dist/content.js --watch"
+    "build": "esbuild src/content.js --bundle --outfile=dist/content.js --minify --sourcemap",
+    "watch": "esbuild src/content.js --bundle --outfile=dist/content.js --watch",
+    "restore-dev": "node scripts/restore-dev.mjs",
+    "prepublish": "npm run build && node scripts/package-cws.mjs"
   },
   "dependencies": {
     "js-tiktoken": "^1.0.14",
