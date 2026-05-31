@@ -44,3 +44,10 @@ honoka-inbox/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local only instructions
+docs/restrart honoka.md
+
+# CWS build artifacts
+honoka-lite-chrome-extension/*.zip
+honoka-lite/honoka-lite-*.zip
